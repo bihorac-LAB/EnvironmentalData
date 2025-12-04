@@ -60,7 +60,7 @@ Together, these containers enable:
 You need to prepare **only ONE** of the following data elements per encounter.  
 
 ### Option 1: Address
-Sample input files [here](https://github.com/bihorac-LAB/Exposome/tree/main/Tools/demo/address_files/input)
+Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/address_files/input)
 
 - **Format A: Multi-Column Address**
 
@@ -85,8 +85,8 @@ Sample input files [here](https://github.com/bihorac-LAB/Exposome/tree/main/Tool
 Including the following optional files will help streamline the **end-to-end workflow** between geocoding and exposome linkage:
 - **Important**: Do not date-shift your LOCATION/LOCATION_HISTORY files before linkage. Date shifting (if used) should occur post linkage in Step 4.
 - 
-- [`LOCATION.csv`](https://github.com/bihorac-LAB/Exposome/blob/main/Tools/demo/address_files/input/LOCATION.csv)  
-- [`LOCATION_HISTORY.csv`](https://github.com/bihorac-LAB/Exposome/blob/main/Tools/demo/address_files/input/LOCATION_HISTORY.csv)
+- [`LOCATION.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/address_files/input/LOCATION.csv)  
+- [`LOCATION_HISTORY.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/address_files/input/LOCATION_HISTORY.csv)
 
 If these files are provided during **geocoding**, the output will automatically include the updated latitude and longitude information required for the **postgis linkage container**.  
 
@@ -108,7 +108,7 @@ If they are **not provided**, users will need to **manually update their LOCATIO
 
 ### Option 2: Coordinates
 
-Sample input files [here](https://github.com/bihorac-LAB/Exposome/tree/main/Tools/demo/latlong_files/input)
+Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/latlong_files/input)
 
 | latitude   | longitude | entity_id | year
 |------------|-----------|-----------|-------
@@ -207,7 +207,7 @@ docker run -it --rm \
 After running the geocoder container (for Option 1, 2, or 3), the tool generates output files in the `output/` folder.
 
 #### CSV Input (Option 1 & 2)
-Sample outputs [demo/address_files/output](https://github.com/bihorac-LAB/Exposome/tree/main/Tools/demo/address_files/output)
+Sample outputs [demo/address_files/output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/address_files/output)
 
 **Files Generated**
 Each input file produces:
@@ -241,7 +241,7 @@ Used when geocoding fails or is imprecise. Possible values include:
 - **Blank/Incomplete address** – Address is empty or has missing components.  
 - **Zip missing** – ZIP code not provided.  
 
-> 💡 **Tip:** You can expand hospital detection by adding known addresses to `HOSPITAL_ADDRESSES` in [`Address_to_FIPS.py`](https://github.com/bihorac-LAB/Exposome/blob/main/Tools/code/Address_to_FIPS.py).
+> 💡 **Tip:** You can expand hospital detection by adding known addresses to `HOSPITAL_ADDRESSES` in [`Address_to_FIPS.py`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/code/Address_to_FIPS.py).
 
 **Formatting Note for `HOSPITAL_ADDRESSES`:**
   - Single-line string  
@@ -252,7 +252,7 @@ Used when geocoding fails or is imprecise. Possible values include:
 ---
 
 #### OMOP Input (Option 3)
-**Sample outputs:** [demo/OMOP/output](https://github.com/bihorac-LAB/Exposome/tree/main/Tools/demo/OMOP/output)
+**Sample outputs:** [demo/OMOP/output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/OMOP/output)
 
 #### **Folder Structure**
 
@@ -374,7 +374,7 @@ See [Date Shifting SOP for More Details](https://github.com/chorus-ai/Chorus_SOP
 ---
 ### References & sample files
 #### Geocoding
-- Sample files: [Geocoding Demo Files](https://github.com/bihorac-LAB/Exposome/tree/main/Tools/demo)
+- Sample files: [Geocoding Demo Files](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo)
 
 #### GIS Linkage
 - Sample files: [PostGIS Exposure CSVs](https://github.com/chorus-ai/chorus-container-apps/tree/main/postgis-exposure/csv)
@@ -448,7 +448,7 @@ docker run --rm -v "ABS_OUTPUT_FOLDER:/tmp" \
 #### Script Highlights
 
 ##### Address_to_FIPS.py Logic
-This [script](https://github.com/bihorac-LAB/Exposome/blob/main/Tools/code/Address_to_FIPS.py) handles CSV-based input:
+This [script](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/code/Address_to_FIPS.py) handles CSV-based input:
 - Reads CSV files
 - Normalizes address or uses lat/lon
 - Runs DeGAUSS Docker container to generate:
@@ -457,7 +457,7 @@ This [script](https://github.com/bihorac-LAB/Exposome/blob/main/Tools/code/Addre
 - Packages outputs into ZIP
 
 ##### OMOP_to_FIPS.py Logic
-This [script](https://github.com/bihorac-LAB/Exposome/blob/main/Tools/code/OMOP_to_FIPS.py) integrates directly with **OMOP CDM**: 
+This [script](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/code/OMOP_to_FIPS.py) integrates directly with **OMOP CDM**: 
 - Extracts OMOP CDM data
 - Categorizes into valid/invalid address or coordinates
 - Executes FIPS generation (same as CSV workflow) 

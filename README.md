@@ -42,15 +42,15 @@ To protect patient privacy, geocoding should be executed **locally**. Our toolki
 
 ### Documentation
 
-Detailed instructions are available [here](https://github.com/bihorac-LAB/Exposome/blob/main/Tools/doc/UserManual.md).
+Detailed instructions are available [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/doc/UserManual.md).
 
 Step-by-Step guides (Wiki):
 
-- **[Home](https://github.com/bihorac-LAB/Exposome/wiki)** - Overview and quick navigation
-- **[Input Preparation](https://github.com/bihorac-LAB/Exposome/wiki/Input-Preparation)** - Prepare your address, coordinate, or OMOP data
-- **[Running the Geocoder](https://github.com/bihorac-LAB/Exposome/wiki/Running-the-Geocoder)** - Execute geocoding to generate FIPS codes
-- **[Understanding Outputs](https://github.com/bihorac-LAB/Exposome/wiki/Understanding-Outputs)** - Interpret geocoded results and FIPS codes
-- **[GIS Linkage](https://github.com/bihorac-LAB/Exposome/wiki/GIS-Linkage)** - Link geocoded data with SDoH indices using PostGISils
+- **[Home](https://github.com/bihorac-LAB/EnvironmentalData/wiki)** - Overview and quick navigation
+- **[Input Preparation](https://github.com/bihorac-LAB/EnvironmentalData/wiki/Input-Preparation)** - Prepare your address, coordinate, or OMOP data
+- **[Running the Geocoder](https://github.com/bihorac-LAB/EnvironmentalData/wiki/Running-the-Geocoder)** - Execute geocoding to generate FIPS codes
+- **[Understanding Outputs](https://github.com/bihorac-LAB/EnvironmentalData/wiki/Understanding-Outputs)** - Interpret geocoded results and FIPS codes
+- **[GIS Linkage](https://github.com/bihorac-LAB/EnvironmentalData/wiki/GIS-Linkage)** - Link geocoded data with SDoH indices using PostGISils
 
 
 ### Demo Videos
