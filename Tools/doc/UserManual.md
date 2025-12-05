@@ -7,7 +7,7 @@ This repository provides a **reproducible workflow** to geocode patient location
 > **Demo video** [Watch here](https://drive.google.com/drive/folders/14FdY0lB3WRIiYrgCdeje6NAQI7Q_RB2w?usp=sharing)
 ---
 ## 📑 Table of Contents
-- [Geocoding Patient Data for Exposome Linkage](#geocoding-patient-data-for-exposome-linkage)
+- [Geocoding Patient Data for Environmental Linkage](#geocoding-patient-data-for-environmental-linkage)
   - [📑 Table of Contents](#-table-of-contents)
   - [Overview](#overview)
   - [Input Options](#input-options)
@@ -30,7 +30,7 @@ This repository provides a **reproducible workflow** to geocode patient location
     - [Step 5: Validate \& Inspect Outputs](#step-5-validate--inspect-outputs)
     - [Step 6: Optional - Site-level Date Shifting](#step-6-optional---site-level-date-shifting)
     - [Step 7: Upload \& Centralized De-identification](#step-7-upload--centralized-de-identification)
-    - [Step 8: Link with Exposome Web Platform](#step-8-link-with-exposome-web-platform)
+    - [Step 8: Link with Environmental Data Web Platform](#step-8-link-with-environmental-data-web-platform)
   - [Appendix](#appendix)
     - [Geocoding Workflow](#geocoding-workflow)
       - [Method: DeGAUSS Toolkit (Docker-based)](#method-degauss-toolkit-docker-based)
@@ -360,7 +360,7 @@ See [Date Shifting SOP for More Details](https://github.com/chorus-ai/Chorus_SOP
 
 ---
 
-### Step 8: Link with Exposome Web Platform (internal to UF)
+### Step 8: Link with Environmental Data Web Platform (internal to UF)
 1. Register at [https://exposome.rc.ufl.edu](https://exposome.rc.ufl.edu/)  
 2. Upload `*_with_fips.zip` file obtained from Step 3 
 3. Input CSV must contain:  
