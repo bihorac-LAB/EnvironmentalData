@@ -71,7 +71,7 @@ A basic data analysis tool will be included in the next release.
 
 The web application is deployed on [HiPerGator](https://www.rc.ufl.edu/about/hipergator/) PubApps.  
 
-![External Investigator Workflow](./assets/External%20investigator%20workflow.png)
+![External Investigator Workflow](./assets/External%20Investigator%20Workflow.png)
 
 ## Contributing to Environmental Data Linkage Tool
 
