@@ -1,4 +1,4 @@
-# Exposome Data Linkage Tool
+# Exvironmental Data Linkage Tool
 
 ## Background and Introduction
 
