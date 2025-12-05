@@ -2,7 +2,7 @@
 
 ## Background and Introduction
 
-Exposome data refers to the comprehensive collection and integration of information representing an individual's or population's exposure to environmental, social, and lifestyle factors, including Social Determinants of Health (SDoH). These datasets are increasingly important for clinical research worldwide. However, because they are collected and maintained by different organizations, there is no centralized, unified database that allows researchers to quickly access, visualize, and download reliable data.
+Environmental data refers to the comprehensive collection and integration of information representing an individual's or population's exposure to environmental, social, and lifestyle factors, including Social Determinants of Health (SDoH). These datasets are increasingly important for clinical research worldwide. However, because they are collected and maintained by different organizations, there is no centralized, unified database that allows researchers to quickly access, visualize, and download reliable data.
 
 This project addresses the following needs:
 
@@ -55,7 +55,7 @@ Step-by-Step guides (Wiki):
 
 ### Demo Videos
 - [FIPS Generation](https://www.loom.com/share/603607c1365342cb9fb2303566f529cc?sid=81cab3db-8189-4ad4-b1fd-baca7a73bf25)  
-- [Exposome Linkage to Other Datasets](https://www.loom.com/share/bc4097b0d3db4f8f9132a06a49c17e71?sid=ad9671c1-6535-4bc9-b893-7e917efbcf75)
+- [Environmental Linkage to Other Datasets](https://www.loom.com/share/bc4097b0d3db4f8f9132a06a49c17e71?sid=ad9671c1-6535-4bc9-b893-7e917efbcf75)
 
 ---
 
@@ -64,7 +64,7 @@ Step-by-Step guides (Wiki):
 We developed a [web application](https://exposome.rc.ufl.edu/) that provides investigators with:
 
 - A data catalog  
-- The exposome data linkage tool  
+- The environmental data linkage tool  
 - Data visualization features  
 
 A basic data analysis tool will be included in the next release.  
@@ -73,7 +73,7 @@ The web application is deployed on [HiPerGator](https://www.rc.ufl.edu/about/hip
 
 ![External Investigator Workflow](./assets/External%20investigator%20workflow.png)
 
-## Contributing to Exposome Data Linkage Tool
+## Contributing to Environmental Data Linkage Tool
 
 Thank you for your interest in contributing! To ensure smooth collaboration, please follow these guidelines:
 
