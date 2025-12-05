@@ -1,4 +1,4 @@
-# Exvironmental Data Linkage Tool
+# Environmental Data Linkage Tool
 
 ## Background and Introduction
 
