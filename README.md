@@ -25,7 +25,7 @@ Key design elements:
   - **`variable_value` table:** Stores variable values linked to geocoded locations  
 * Geospatial data is stored in dedicated tables and linked to variables using geoCodes such as FIPS, ZCTA, COUNTY, and STATE  
 
-![Database Design](./assets/Database%20design.png)
+![Database Design](./assets/Database%20Design.png)
 
 ---
 
