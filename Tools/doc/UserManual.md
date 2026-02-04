@@ -310,7 +310,7 @@ Sample `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv`: [here](https://github.co
      --env VARIABLES=134,135,136 \
      --env DATA_SOURCES=1234,5150,9999 \
      -v $(pwd)/test/source:/source \
-     -d ghcr.io/chorus-ai/chorus-postgis-sdoh:main
+     -d ghcr.io/chorus-ai/chorus-postgis-exposure:main
    ```
    - Replace `VARIABLES` with the comma-separated list of variable IDs you need from `VRBL_SRC_SIMPLE.csv`.
    - Replace `DATA_SOURCES` with the relevant data source IDs (from `DATA_SRC_SIMPLE.csv`).
