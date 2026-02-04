@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import argparse
+import numpy as np
 from loguru import logger
 from sqlalchemy import create_engine
 import concurrent.futures
@@ -29,7 +30,22 @@ host_base = os.environ["HOST_PWD"]
 
 # logger.add(sys.stderr, format="{time} {level} {message}", filter="my_module", level="INFO")
 #get the log file
+def ensure_output_folder(output_folder):
+    output_folder = os.path.abspath(output_folder) if output_folder else os.path.join(os.getcwd(), "output")
+    fallback_folder = os.path.join(os.path.dirname(output_folder), "output_dir")
+
+    for candidate in (output_folder, fallback_folder):
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            return candidate
+        except FileExistsError:
+            continue
+
+    return fallback_folder
+
+
 def configure_logging(output_folder):
+    output_folder = ensure_output_folder(output_folder)
     # Create log subfolder inside the output folder
     log_folder = os.path.join(output_folder, "log")
     os.makedirs(log_folder, exist_ok=True)
@@ -324,7 +340,7 @@ def generate_fips_degauss(df, year, output_folder):
 # Function to process each individual CSV file
 def validate_location_columns(file_path):
     df = pd.read_csv(file_path, nrows=0)
-    required = ['location_id', 'address_1', 'address_2', 'city', 'state', 'zip', 'county', 'location_source_value', 'country_concept_id', 'country_source_value', 'latitude', 'longitude']
+    required = ['location_id', 'address_1', 'address_2', 'city', 'state', 'zip', 'county', 'location_source_value', 'country_concept_id', 'country_source_value']
     missing = [col for col in required if col not in df.columns]
     if missing:
         logger.error(f"LOCATION.csv is missing required columns: {missing}")
@@ -356,12 +372,60 @@ def process_csv_file(file, input_folder, final_coordinate_files, main_output_fol
     if base_filename.lower() == 'location':
         validate_location_columns(file_path)
         # Special processing for LOCATION.csv
-        if 'latitude' not in df.columns or df['latitude'].isnull().all() or 'longitude' not in df.columns or df['longitude'].isnull().all():
-            df['address'] = (df['address_1'].fillna('') + ' ' + df['address_2'].fillna('') + ' ' + df['city'].fillna('') + ' ' + df['state'].fillna('') + ' ' + df['zip'].fillna('')).str.strip()
-            option = 1
-        else:
-            df.rename(columns={'latitude': 'lat', 'longitude': 'lon'}, inplace=True)
-            option = 3
+        if 'latitude' not in df.columns:
+            df['latitude'] = pd.NA
+        if 'longitude' not in df.columns:
+            df['longitude'] = pd.NA
+
+        df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+        df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        df.loc[~np.isfinite(df['latitude']), 'latitude'] = np.nan
+        df.loc[~np.isfinite(df['longitude']), 'longitude'] = np.nan
+
+        missing_mask = df['latitude'].isna() | df['longitude'].isna()
+        if missing_mask.any():
+            logger.info("LOCATION.csv has missing/invalid lat/lon. Attempting to geocode missing rows.")
+            df_missing = df.loc[missing_mask].copy()
+            df_missing['row_id'] = df_missing.index
+            df_missing['street'] = (
+                df_missing['address_1'].fillna('') + ' ' + df_missing['address_2'].fillna('')
+            ).str.strip()
+
+            missing_output_folder = os.path.join(
+                output_folder,
+                f"missing_latlon_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
+            os.makedirs(missing_output_folder, exist_ok=True)
+            threshold = 0.7
+            geocoded_file = generate_coordinates_degauss(
+                df_missing,
+                ['street', 'city', 'state', 'zip'],
+                threshold,
+                missing_output_folder
+            )
+
+            try:
+                geocoded_missing = pd.read_csv(geocoded_file)
+                if 'row_id' in geocoded_missing.columns:
+                    geocoded_missing['lat'] = pd.to_numeric(geocoded_missing.get('lat'), errors='coerce')
+                    geocoded_missing['lon'] = pd.to_numeric(geocoded_missing.get('lon'), errors='coerce')
+
+                    valid_coords = (
+                        geocoded_missing['lat'].between(-90.0, 90.0)
+                        & geocoded_missing['lon'].between(-180.0, 180.0)
+                    )
+                    for _, row in geocoded_missing[valid_coords].iterrows():
+                        rid = row['row_id']
+                        df.at[rid, 'latitude'] = row['lat']
+                        df.at[rid, 'longitude'] = row['lon']
+                else:
+                    logger.warning("row_id missing from geocode output; skipping merge for missing rows.")
+            except Exception as e:
+                logger.warning(f"Could not apply partial geocode results: {e}")
+
+        df.rename(columns={'latitude': 'lat', 'longitude': 'lon'}, inplace=True)
+        option = 3
+
         if 'year_for_fips' not in df.columns:
             df['year_for_fips'] = 2020
     elif base_filename.lower() == 'location_history':
@@ -486,7 +550,7 @@ def main():
     parser.add_argument('--debug', dest='debug', action='store_true', help='Enable debug logging')
 
     args = parser.parse_args()
-    input_folder = args.input
+    input_folder = os.path.abspath(args.input)
 
     # Validate input folder path
     if not os.path.exists(input_folder):
@@ -497,7 +561,7 @@ def main():
         sys.exit(1)
 
     parent_folder = os.path.dirname(input_folder)
-    output_folder = os.path.join(parent_folder, "output")
+    output_folder = ensure_output_folder(os.path.join(parent_folder, "output"))
 
     #Configure logging to write to the output folder
     configure_logging(output_folder)
