@@ -2,3 +2,8 @@ pandas==2.2.3
 loguru==0.7.2
 sqlalchemy==2.0.37
 pyodbc==5.2.0
+usaddress==0.5.11
+geopy==2.4.1
+openpyxl==3.1.5
+pgeocode==0.5.0
+

@@ -115,6 +115,18 @@ COMMON_ADDRESS_TYPO_CORRECTIONS = {
 }
 
 
+PLACEHOLDER_LOCATION_TOKENS = {
+    "not stated",
+    "unknown",
+    "na",
+    "n/a",
+    "none",
+    "null",
+    "missing",
+    "not available",
+}
+
+
 def ensure_output_folder(output_folder: str) -> str:
     output_folder = os.path.abspath(output_folder) if output_folder else os.path.join(os.getcwd(), "output")
     os.makedirs(output_folder, exist_ok=True)
@@ -519,10 +531,71 @@ def classify_geocode_failure_reason(geocode_result: object, lat: object, lon: ob
     if is_valid_coordinate(lat, lon):
         return ""
     if result_text:
-        if result_text.lower() == "geocoded":
+        normalized_result = result_text.lower()
+        geocoder_reason_map = {
+            "imprecise_geocode": "Geocoder could not resolve precise coordinates",
+            "ungeocodable_address": "Address not geocodable",
+            "no_match": "No geocoder match",
+            "multiple_matches": "Multiple ambiguous geocoder matches",
+        }
+        if normalized_result == "geocoded":
             return "No coordinate result returned"
-        return f"{result_text} (no coordinates)"
+        return geocoder_reason_map.get(normalized_result, f"Geocoder status: {normalized_result}")
     return "No geocode match"
+
+
+def is_placeholder_value(value: object) -> bool:
+    normalized = normalize_spaces(value).lower()
+    return normalized in PLACEHOLDER_LOCATION_TOKENS
+
+
+def classify_stage_failure_reason(stage: str, row: pd.Series, zip9_reference: "Zip9Reference", hud_zip5_reference: "HUDZip5Reference") -> str:
+    stage_key = normalize_spaces(stage).lower()
+
+    if stage_key == "address":
+        street = normalize_spaces(row.get("normalized_street", "")) or normalize_spaces(row.get("address_1", ""))
+        city = normalize_spaces(row.get("normalized_city", "")) or normalize_spaces(row.get("city", ""))
+        state = normalize_spaces(row.get("normalized_state", "")) or normalize_spaces(row.get("state", ""))
+        zip5 = normalize_spaces(row.get("zip5", "")) or normalize_spaces(row.get("zip", ""))
+
+        if not any([street, city, state, zip5]):
+            return "Missing address"
+        if not street:
+            return "Incomplete address: street missing"
+        if not city:
+            return "Incomplete address: city missing"
+        if not state:
+            return "Incomplete address: state missing"
+        if not zip5:
+            return "Incomplete address: ZIP missing"
+        if any(is_placeholder_value(value) for value in [street, city, state]):
+            return "Invalid address: placeholder values"
+
+        return classify_geocode_failure_reason(row.get("geocode_result", ""), row.get("lat"), row.get("lon"))
+
+    if stage_key == "zip9":
+        zip9_value = re.sub(r"\D", "", normalize_spaces(row.get("zip9", "")))
+        if not zip9_value:
+            return "Missing ZIP9"
+        if len(zip9_value) != 9:
+            return "Invalid ZIP9"
+        if not zip9_reference.has_zip9(zip9_value, row.get("normalized_state", "")):
+            return "ZIP9 not found in crosswalk"
+
+        return "ZIP9 available but could not generate coordinates"
+
+    if stage_key == "zip5":
+        zip5_value = re.sub(r"\D", "", normalize_spaces(row.get("zip5", "")))[:5]
+        if not zip5_value:
+            return "Missing ZIP5"
+        if len(zip5_value) != 5:
+            return "Invalid ZIP5"
+        if not hud_zip5_reference.has_zip5(zip5_value, row.get("year")):
+            return "ZIP5 not found in crosswalk"
+
+        return "ZIP5 available but could not generate coordinates"
+
+    return classify_geocode_failure_reason(row.get("geocode_result", ""), row.get("lat"), row.get("lon"))
 
 
 class Zip9Reference:
@@ -792,7 +865,7 @@ def apply_geocoding_fallback(
     zip9_reference: Zip9Reference,
     hud_zip5_reference: HUDZip5Reference,
     analysis_folder: str,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     location_df = location_df.copy()
     location_df["latitude"] = pd.to_numeric(location_df.get("latitude"), errors="coerce")
     location_df["longitude"] = pd.to_numeric(location_df.get("longitude"), errors="coerce")
@@ -848,40 +921,45 @@ def apply_geocoding_fallback(
         axis=1,
     )
 
-    stage_audit_records: List[Dict[str, object]] = []
+    failure_reasons_by_location: Dict[str, List[str]] = {}
 
-    def record_audit(
-        location_id: object,
-        stage: str,
-        query_variant: str,
-        attempted: bool,
-        query: object,
-        precision_status: str,
-        rejection_reason: str,
-        geocode_result: object = "",
-        lat: object = np.nan,
-        lon: object = np.nan,
-    ) -> None:
-        stage_audit_records.append(
-            {
-                "location_id": location_id,
-                "stage": stage,
-                "query_variant": query_variant,
-                "attempted": attempted,
-                "query": query,
-                "precision_status": precision_status,
-                "rejection_reason": rejection_reason,
-                "geocode_result": geocode_result,
-                "lat": lat,
-                "lon": lon,
-            }
-        )
+    def location_key(location_id: object) -> str:
+        key = normalize_spaces(location_id)
+        return key if key else str(location_id)
+
+    def add_failure_reason(location_id: object, stage: str, reason: str) -> None:
+        reason_clean = normalize_spaces(reason)
+        if not reason_clean:
+            return
+
+        full_reason = f"{stage}: {reason_clean}" if stage else reason_clean
+        key = location_key(location_id)
+        bucket = failure_reasons_by_location.setdefault(key, [])
+        if full_reason not in bucket:
+            bucket.append(full_reason)
 
     def run_stage(stage: str, query_variant: str, query_column: str, candidate_mask: pd.Series):
         if not candidate_mask.any():
             return
 
-        candidates = location_df.loc[candidate_mask, ["_rid", "location_id", query_column]].copy()
+        candidates = location_df.loc[
+            candidate_mask,
+            [
+                "_rid",
+                "location_id",
+                query_column,
+                "normalized_street",
+                "address_1",
+                "normalized_city",
+                "city",
+                "normalized_state",
+                "state",
+                "zip5",
+                "zip9",
+                "zip",
+                "year",
+            ],
+        ].copy()
         candidates["address"] = candidates[query_column].apply(normalize_geocoder_query)
         candidates = candidates[candidates["address"] != ""].copy()
         if candidates.empty:
@@ -899,42 +977,17 @@ def apply_geocoding_fallback(
 
         if geocoded.empty:
             for _, row in candidates.iterrows():
-                record_audit(
-                    row["location_id"],
-                    stage,
-                    query_variant,
-                    True,
-                    row["address"],
-                    "not_geocoded",
-                    "Geocoder returned no output",
-                )
+                add_failure_reason(row["location_id"], stage, "Geocoder returned no output")
             return
 
         unique_results = unique_queries.merge(geocoded, on="_rid", how="left")
         stage_results = candidates.merge(unique_results.drop(columns=["_rid"]), on="address", how="left")
         stage_results["valid"] = stage_results.apply(lambda row: is_valid_coordinate(row.get("lat"), row.get("lon")), axis=1)
 
-        for _, row in stage_results.iterrows():
-            geocode_result = normalize_spaces(row.get("geocode_result", ""))
-            if row["valid"]:
-                precision_status = "geocoded"
-                rejection_reason = ""
-            else:
-                precision_status = geocode_result if geocode_result else "not_geocoded"
-                rejection_reason = classify_geocode_failure_reason(row.get("geocode_result", ""), row.get("lat"), row.get("lon"))
-
-            record_audit(
-                row["location_id"],
-                stage,
-                query_variant,
-                True,
-                row["address"],
-                precision_status,
-                rejection_reason,
-                row.get("geocode_result", ""),
-                row.get("lat"),
-                row.get("lon"),
-            )
+        stage_failures = stage_results[~stage_results["valid"]]
+        for _, row in stage_failures.iterrows():
+            rejection_reason = classify_stage_failure_reason(stage, row, zip9_reference, hud_zip5_reference)
+            add_failure_reason(row["location_id"], stage, rejection_reason)
 
         success = stage_results[stage_results["valid"]].copy()
         for _, row in success.iterrows():
@@ -948,15 +1001,7 @@ def apply_geocoding_fallback(
 
     address_blank = pending & (location_df["address_query"] == "")
     for _, row in location_df.loc[address_blank, ["location_id", "normalized_street", "address_1", "address", "normalized_city", "city", "normalized_state", "state", "zip5", "zip"]].iterrows():
-        record_audit(
-            row["location_id"],
-            "address",
-            "full_address",
-            False,
-            "",
-            "not_attempted",
-            classify_address_input_reason(row),
-        )
+        add_failure_reason(row["location_id"], "address", classify_address_input_reason(row))
 
     run_stage("address", "full_address", "address_query", pending & (location_df["address_query"] != ""))
 
@@ -965,15 +1010,7 @@ def apply_geocoding_fallback(
     zip9_not_validated = pending & (location_df["zip9_query"] != "") & (~location_df["zip9_validated"])
     for mask in [zip9_missing, zip9_not_validated]:
         for _, row in location_df.loc[mask, ["location_id", "zip9", "zip9_query", "normalized_state"]].iterrows():
-            record_audit(
-                row["location_id"],
-                "zip9",
-                "zip9_only",
-                False,
-                row.get("zip9", ""),
-                "not_attempted",
-                classify_zip9_input_reason(row, zip9_reference),
-            )
+            add_failure_reason(row["location_id"], "zip9", classify_zip9_input_reason(row, zip9_reference))
 
     run_stage("zip9", "city_state_zip9", "zip9_city_state_query", pending & (location_df["zip9_city_state_query"] != "") & location_df["zip9_validated"])
     pending = location_df["geocode_level"] == "pending"
@@ -984,15 +1021,7 @@ def apply_geocoding_fallback(
     zip5_not_validated = pending & (location_df["zip5_query"] != "") & (~location_df["zip5_validated"])
     for mask in [zip5_missing, zip5_not_validated]:
         for _, row in location_df.loc[mask, ["location_id", "zip5", "zip5_query", "year"]].iterrows():
-            record_audit(
-                row["location_id"],
-                "zip5",
-                "zip5_only",
-                False,
-                row.get("zip5", ""),
-                "not_attempted",
-                classify_zip5_input_reason(row, hud_zip5_reference),
-            )
+            add_failure_reason(row["location_id"], "zip5", classify_zip5_input_reason(row, hud_zip5_reference))
 
     run_stage("zip5", "city_state_zip5", "zip5_city_state_query", pending & (location_df["zip5_city_state_query"] != "") & location_df["zip5_validated"])
     pending = location_df["geocode_level"] == "pending"
@@ -1007,22 +1036,37 @@ def apply_geocoding_fallback(
             if not centroid:
                 continue
             lat, lon = centroid
-            record_audit(
-                row["location_id"],
-                "zip5",
-                "dataset_zip5_centroid",
-                True,
-                row.get("zip5", ""),
-                "geocoded",
-                "",
-                "zip5_dataset_centroid",
-                lat,
-                lon,
-            )
             location_df.loc[location_df["location_id"] == row["location_id"], "latitude"] = lat
             location_df.loc[location_df["location_id"] == row["location_id"], "longitude"] = lon
             location_df.loc[location_df["location_id"] == row["location_id"], "geocode_level"] = "zip5"
             location_df.loc[location_df["location_id"] == row["location_id"], "geocode_reason"] = ""
+
+    pending = location_df["geocode_level"] == "pending"
+    if pending.any():
+        try:
+            import pgeocode
+            nomi = pgeocode.Nominatim("us")
+            zip5_pgeocode_mask = pending & (location_df["zip5"].fillna("") != "")
+            unique_zips = location_df.loc[zip5_pgeocode_mask, "zip5"].unique()
+            
+            pgeocode_dict = {}
+            for z in unique_zips:
+                z_clean = str(z).strip()[:5]
+                if len(z_clean) == 5:
+                    res = nomi.query_postal_code(z_clean)
+                    if res is not None and not pd.isna(res.latitude) and not pd.isna(res.longitude):
+                        pgeocode_dict[z_clean] = (float(res.latitude), float(res.longitude))
+            
+            pgeocode_valid_mask = pending & location_df["zip5"].astype(str).str.strip().str[:5].isin(pgeocode_dict)
+            for _, row in location_df.loc[pgeocode_valid_mask, ["location_id", "zip5"]].iterrows():
+                centroid = pgeocode_dict.get(str(row["zip5"]).strip()[:5])
+                if centroid:
+                    location_df.loc[location_df["location_id"] == row["location_id"], "latitude"] = centroid[0]
+                    location_df.loc[location_df["location_id"] == row["location_id"], "longitude"] = centroid[1]
+                    location_df.loc[location_df["location_id"] == row["location_id"], "geocode_level"] = "zip5"
+                    location_df.loc[location_df["location_id"] == row["location_id"], "geocode_reason"] = ""
+        except ImportError:
+            logger.debug("pgeocode is not installed; offline ZIP5 centroid fallback skipped.")
 
     pending = location_df["geocode_level"] == "pending"
     tract_centroids = build_tract_centroid_lookup(location_df)
@@ -1034,18 +1078,6 @@ def apply_geocoding_fallback(
             if not centroid:
                 continue
             lat, lon = centroid
-            record_audit(
-                row["location_id"],
-                "hud_tract",
-                "dataset_tract_centroid",
-                True,
-                tract,
-                "geocoded",
-                "",
-                "hud_tract_dataset_centroid",
-                lat,
-                lon,
-            )
             location_df.loc[location_df["location_id"] == row["location_id"], "latitude"] = lat
             location_df.loc[location_df["location_id"] == row["location_id"], "longitude"] = lon
             location_df.loc[location_df["location_id"] == row["location_id"], "geocode_level"] = "zip5"
@@ -1072,49 +1104,19 @@ def apply_geocoding_fallback(
         axis=1,
     )
 
-    stage_audit_df = pd.DataFrame(
-        stage_audit_records,
-        columns=[
-            "location_id",
-            "stage",
-            "query_variant",
-            "attempted",
-            "query",
-            "precision_status",
-            "rejection_reason",
-            "geocode_result",
-            "lat",
-            "lon",
-        ],
-    )
-
-    if not stage_audit_df.empty:
-        stage_audit_df["stage_reason"] = (
-            stage_audit_df["stage"].fillna("")
-            + ": "
-            + stage_audit_df["rejection_reason"].fillna("")
-        ).str.strip()
-
-        failed_stage_reason_map = (
-            stage_audit_df[stage_audit_df["stage_reason"] != ""]
-            .groupby("location_id")["stage_reason"]
-            .apply(lambda values: " | ".join(dict.fromkeys(values.tolist())))
-            .to_dict()
+    failed_mask = location_df["geocode_level"] == "failed"
+    if failure_reasons_by_location:
+        location_df.loc[failed_mask, "geocode_reason"] = location_df.loc[failed_mask, "location_id"].apply(
+            lambda value: " | ".join(failure_reasons_by_location.get(location_key(value), []))
         )
-
-        failed_mask = location_df["geocode_level"] == "failed"
-        if failed_stage_reason_map:
-            location_df.loc[failed_mask, "geocode_reason"] = location_df.loc[failed_mask].apply(
-                lambda row: failed_stage_reason_map.get(row.get("location_id"), ""),
-                axis=1,
-            )
+    location_df.loc[failed_mask & (location_df["geocode_reason"].fillna("") == ""), "geocode_reason"] = "No geocode match"
 
     location_df.drop(
         columns=["_rid", "address_query", "zip9_hyphen", "zip9_city_state_query", "zip9_query", "zip9_validated", "zip5_city_state_query", "zip5_validated", "zip5_query", "hud_tract"],
         inplace=True,
         errors="ignore",
     )
-    return location_df, stage_audit_df
+    return location_df
 
 
 def prepare_location_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -1207,19 +1209,6 @@ def prepare_location_history_dataframe(source_df: pd.DataFrame, location_df: pd.
         history["start_date"] = start_dates.dt.strftime("%Y-%m-%d").fillna("1998-01-01")
         history["end_date"] = end_dates.dt.strftime("%Y-%m-%d").fillna("2020-01-01")
 
-    if "modifier_source_value" in location_df.columns:
-        geocode_map = location_df[["location_id", "modifier_source_value"]].copy()
-    else:
-        geocode_map = location_df[["location_id", "geocode_level", "geocode_reason"]].copy()
-        geocode_map["modifier_source_value"] = geocode_map.apply(
-            lambda row: format_modifier_source_value(row.get("geocode_level"), row.get("geocode_reason")),
-            axis=1,
-        )
-        geocode_map = geocode_map[["location_id", "modifier_source_value"]]
-
-    history = history.merge(geocode_map, on="location_id", how="left")
-    history["modifier_source_value"] = history["modifier_source_value"].fillna("")
-
     for col in ["relationship_type_concept_id", "domain_id"]:
         history[col] = pd.to_numeric(history[col], errors="coerce").fillna(
             DEFAULT_RELATIONSHIP_TYPE_CONCEPT_ID if col == "relationship_type_concept_id" else DEFAULT_DOMAIN_ID
@@ -1230,7 +1219,7 @@ def prepare_location_history_dataframe(source_df: pd.DataFrame, location_df: pd.
     history["start_date"] = pd.to_datetime(history["start_date"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("1998-01-01")
     history["end_date"] = pd.to_datetime(history["end_date"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("2020-01-01")
 
-    return history[LOCATION_HISTORY_REQUIRED_COLUMNS + ["modifier_source_value"]].copy()
+    return history[LOCATION_HISTORY_REQUIRED_COLUMNS].copy()
 
 
 def load_input_data(input_folder: str) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
@@ -1272,14 +1261,44 @@ def write_failure_report(location_df: pd.DataFrame, output_folder: str):
     logger.warning(f"Geocoding failures logged to: {report_path}")
 
 
-def write_stage_audit_report(stage_audit_df: pd.DataFrame, output_folder: str):
-    if stage_audit_df.empty:
-        logger.warning("Stage audit report is empty; no geocoding attempts were recorded.")
+def write_geocoding_summary(location_df: pd.DataFrame, output_folder: str):
+    total_records = int(len(location_df))
+    if total_records == 0:
+        logger.warning("No LOCATION records were available to summarize geocoding success.")
         return
 
-    report_path = os.path.join(output_folder, f"geocode_stage_audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
-    stage_audit_df.to_csv(report_path, index=False)
-    logger.info(f"Stage-level geocoding audit output generated: {report_path}")
+    valid_mask = location_df.apply(
+        lambda row: is_valid_coordinate(row.get("latitude"), row.get("longitude")),
+        axis=1,
+    )
+    linked_records = int(valid_mask.sum())
+    unlinked_records = total_records - linked_records
+    success_rate_percent = (linked_records / total_records) * 100
+
+    geocode_level_counts = location_df.get("geocode_level", pd.Series(dtype=str)).fillna("").astype(str).str.lower().value_counts()
+
+    summary_df = pd.DataFrame(
+        [
+            {
+                "total_records": total_records,
+                "records_with_coordinates": linked_records,
+                "records_without_coordinates": unlinked_records,
+                "success_rate_percent": round(success_rate_percent, 2),
+                "level1_provided": int(geocode_level_counts.get("provided", 0)),
+                "level2_address": int(geocode_level_counts.get("address", 0)),
+                "level3_zip9": int(geocode_level_counts.get("zip9", 0)),
+                "level4_zip5": int(geocode_level_counts.get("zip5", 0)),
+                "failed": int(geocode_level_counts.get("failed", 0)),
+            }
+        ]
+    )
+
+    report_path = os.path.join(output_folder, f"geocoding_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+    summary_df.to_csv(report_path, index=False)
+    logger.info(
+        f"Geocoding success rate: {success_rate_percent:.2f}% ({linked_records}/{total_records}). "
+        f"Summary generated: {report_path}"
+    )
 
 
 def main():
@@ -1310,7 +1329,7 @@ def main():
         if not hud_zip5_reference.base_path or not hud_zip5_reference._file_entries:
             logger.warning("HUD ZIP crosswalk files not found. ZIP5 validation will fail closed.")
 
-        location_df, stage_audit_df = apply_geocoding_fallback(
+        location_df = apply_geocoding_fallback(
             location_df,
             output_folder,
             zip9_reference,
@@ -1331,7 +1350,7 @@ def main():
         location_history_output.to_csv(location_history_output_path, index=False)
         logger.info(f"LOCATION_HISTORY output generated: {location_history_output_path}")
 
-        write_stage_audit_report(stage_audit_df, output_folder)
+        write_geocoding_summary(location_df, output_folder)
         write_failure_report(location_df, output_folder)
     finally:
         cleanup_analysis_preprocessed_folder(analysis_folder)
