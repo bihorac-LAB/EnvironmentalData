@@ -153,7 +153,7 @@ def generate_coordinates_degauss(df, columns, threshold, output_folder):
     logger.debug(f"Using container path {container_input_path} with /workspace mount for geocoder access")
     
     try:
-        result = subprocess.run(' '.join(docker_command), shell=True, check=True, capture_output=True, text=True)
+        result = subprocess.run(docker_command, check=True, capture_output=True, text=True)
         logger.info("Docker command executed successfully.")
         logger.info(result.stdout)
     except subprocess.CalledProcessError as e:

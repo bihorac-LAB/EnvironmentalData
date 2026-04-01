@@ -1196,7 +1196,7 @@ def prepare_location_history_dataframe(source_df: pd.DataFrame, location_df: pd.
             years = pd.to_numeric(source_df["year"], errors="coerce").fillna(1998).astype(int)
             start_dates = pd.to_datetime(years.astype(str) + "-01-01", errors="coerce")
         else:
-            start_dates = pd.to_datetime(pd.Series(["1998-01-01"] * len(source_df)), errors="coerce")
+            start_dates = pd.Series([pd.NaT] * len(source_df), index=source_df.index)
 
         if "end_date" in source_df.columns and source_df["end_date"].notna().any():
             end_dates = pd.to_datetime(source_df["end_date"], errors="coerce")
@@ -1204,10 +1204,10 @@ def prepare_location_history_dataframe(source_df: pd.DataFrame, location_df: pd.
             years = pd.to_numeric(source_df["year"], errors="coerce").fillna(2020).astype(int)
             end_dates = pd.to_datetime(years.astype(str) + "-12-31", errors="coerce")
         else:
-            end_dates = pd.to_datetime(pd.Series(["2020-01-01"] * len(source_df)), errors="coerce")
+            end_dates = pd.Series([pd.NaT] * len(source_df), index=source_df.index)
 
-        history["start_date"] = start_dates.dt.strftime("%Y-%m-%d").fillna("1998-01-01")
-        history["end_date"] = end_dates.dt.strftime("%Y-%m-%d").fillna("2020-01-01")
+        history["start_date"] = pd.to_datetime(start_dates, errors="coerce").dt.strftime("%Y-%m-%d")
+        history["end_date"] = pd.to_datetime(end_dates, errors="coerce").dt.strftime("%Y-%m-%d")
 
     for col in ["relationship_type_concept_id", "domain_id"]:
         history[col] = pd.to_numeric(history[col], errors="coerce").fillna(
@@ -1216,8 +1216,15 @@ def prepare_location_history_dataframe(source_df: pd.DataFrame, location_df: pd.
 
     fallback_history_entity_series = pd.Series(np.arange(1, len(history) + 1), index=history.index)
     history["entity_id"] = pd.to_numeric(history["entity_id"], errors="coerce").fillna(fallback_history_entity_series).astype(int)
-    history["start_date"] = pd.to_datetime(history["start_date"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("1998-01-01")
-    history["end_date"] = pd.to_datetime(history["end_date"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("2020-01-01")
+    history["start_date"] = pd.to_datetime(history["start_date"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
+    history["end_date"] = pd.to_datetime(history["end_date"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
+
+    missing_start = (history["start_date"] == "").sum()
+    if missing_start:
+        logger.warning(
+            f"Generated LOCATION_HISTORY contains {int(missing_start)} rows with blank start_date. "
+            "Provide start_date or year in source input for OMOP-compliant temporal mapping."
+        )
 
     return history[LOCATION_HISTORY_REQUIRED_COLUMNS].copy()
 
