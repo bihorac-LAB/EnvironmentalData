@@ -19,6 +19,7 @@ This repository provides a **reproducible workflow** to geocode patient location
     - [Step 2: Generate LOCATION Tables](#step-2-generate-location-tables)
     - [Step 3: Output Structure](#step-3-output-structure)
     - [Step 4: GIS Linkage with PostGIS-Exposure Tool](#step-4-gis-linkage-with-postgis-exposure-tool)
+      - [Datasets Linked](#datasets-linked)
       - [Prerequisites for GIS Linkage](#prerequisites-for-gis-linkage)
       - [Expected Outputs](#expected-outputs)
       - [GIS Linkage Workflow](#gis-linkage-workflow)
@@ -43,7 +44,7 @@ This workflow uses **two separate Docker containers** to take patient addresses 
    Converts addresses or coordinates into OMOP `LOCATION` / `LOCATION_HISTORY` tables with latitude and longitude.
 
 2. **Exposome Linkage Container (`ghcr.io/chorus-ai/chorus-postgis-exposure:main`)**  
-   Spatially joins those tables with environmental and social determinant datasets (ADI, SVI, AHRQ) to produce `EXTERNAL_EXPOSURE.csv`.
+   Spatially joins those tables with environmental and social determinant datasets (ADI, SVI, EJI, AHRQ) to produce `EXTERNAL_EXPOSURE.csv`.
 
 The path is the same for every site:
 
@@ -236,7 +237,29 @@ Rows that could not be geocoded are listed in `geocode_failures_<timestamp>.csv`
 ### Step 4: GIS Linkage with PostGIS-Exposure Tool
 
 **Purpose:**  
-Spatially joins the latitude and longitude from your `LOCATION` tables with geospatial indices (ADI, SVI, AHRQ) and produces `EXTERNAL_EXPOSURE.csv`.
+Spatially joins the latitude and longitude from your `LOCATION` tables with geospatial indices (ADI, SVI, EJI, AHRQ) and produces `EXTERNAL_EXPOSURE.csv`.
+
+---
+
+#### Datasets Linked
+
+Four dataset families are available. All are joined at **Census tract** level, using Census TIGER/Line tract geometry (data source `7700`) as the spatial backbone.
+
+| Dataset | Source | Vintages available | Variables |
+|---------|--------|--------------------|-----------|
+| **ADI** — Area Deprivation Index | UW-Madison (Zenodo) | 2015, 2020, 2023 | 6 |
+| **SVI** — Social Vulnerability Index | CDC/ATSDR | 2010, 2014, 2016, 2018, 2020, 2022 | 651 |
+| **EJI** — Environmental Justice Index | CDC/ATSDR | 2022, 2024 | 239 |
+| **AHRQ SDOH** — Social Determinants of Health | AHRQ (Zenodo) | 2009–2023, annual | 4,195 |
+
+**How the ID numbers map to datasets.** The two centrally managed CSVs are the lookup tables for the numbers you pass in [Step 1](#gis-linkage-workflow) below:
+
+| File | Column to use | Maps to |
+|------|---------------|---------|
+| [`VRBL_SRC_SIMPLE.csv`](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/csv/VRBL_SRC_SIMPLE.csv) | `variable_source_id` → `VARIABLES` | One row per variable. `variable_name` is what lands in `exposure_source_value`; `dataset_type` says which family it belongs to (`ADI`, `SVI`, `EJI`, `AHRQ`). |
+| [`DATA_SRC_SIMPLE.csv`](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/csv/DATA_SRC_SIMPLE.csv) | `data_source_uuid` → `DATA_SOURCES` | One row per dataset **vintage** (dataset + year), with its download URL and documentation link. |
+
+To confirm what a given ID is before requesting it, look the number up in the relevant file. For example, `variable_source_id` `96` resolves to its `variable_name` and `dataset_type` in `VRBL_SRC_SIMPLE.csv`; `data_source_uuid` `9922` is SVI's 2022 tract release in `DATA_SRC_SIMPLE.csv`.
 
 ---
 
@@ -252,7 +275,7 @@ Sample `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv`: [here](https://github.co
 ---
 
 #### Expected Outputs
-- `EXTERNAL_EXPOSURE.csv` containing linked indices (ADI, SVI, AHRQ metrics).
+- `EXTERNAL_EXPOSURE.csv` containing linked indices (ADI, SVI, EJI, AHRQ metrics).
 
 ---
 
