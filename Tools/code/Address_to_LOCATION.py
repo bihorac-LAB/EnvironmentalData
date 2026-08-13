@@ -1131,8 +1131,10 @@ def prepare_location_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     latitude_col = "latitude" if "latitude" in base.columns else "lat" if "lat" in base.columns else None
     longitude_col = "longitude" if "longitude" in base.columns else "lon" if "lon" in base.columns else None
 
-    if "location_id" not in base.columns:
-        base["location_id"] = np.arange(1, len(base) + 1)
+    if "location_id" in base.columns:
+        base["location_id"] = base["location_id"].fillna("")
+    else:
+        base["location_id"] = pd.Series([""] * len(base), index=base.index)
 
     if "address_1" in base.columns:
         base["address_1"] = base["address_1"].fillna("")
@@ -1155,11 +1157,20 @@ def prepare_location_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     base["latitude"] = pd.to_numeric(base.get(latitude_col, np.nan), errors="coerce")
     base["longitude"] = pd.to_numeric(base.get(longitude_col, np.nan), errors="coerce")
 
-    for col in ["entity_id", "person_id", "year", "start_date", "end_date"]:
+    for col in ["entity_id", "person_id", "year", "start_date", "end_date", "visit_start_date", "visit_end_date"]:
         if col not in base.columns:
             base[col] = pd.NA
 
-    selected = LOCATION_REQUIRED_COLUMNS + ["entity_id", "person_id", "year", "start_date", "end_date", "address"]
+    selected = LOCATION_REQUIRED_COLUMNS + [
+        "entity_id",
+        "person_id",
+        "year",
+        "start_date",
+        "end_date",
+        "visit_start_date",
+        "visit_end_date",
+        "address",
+    ]
     for col in selected:
         if col not in base.columns:
             base[col] = pd.NA
@@ -1167,7 +1178,81 @@ def prepare_location_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return base[selected].copy()
 
 
+def coalesce_non_blank_columns(frame: pd.DataFrame, candidate_columns: List[str]) -> pd.Series:
+    combined = pd.Series([""] * len(frame), index=frame.index)
+    for col in candidate_columns:
+        if col not in frame.columns:
+            continue
+        candidate = frame[col].fillna("").astype(str).str.strip()
+        use_mask = (combined == "") & (candidate != "")
+        combined.loc[use_mask] = candidate.loc[use_mask]
+    return combined
+
+
+def summarize_row_numbers(mask: pd.Series, max_rows: int = 10) -> str:
+    row_numbers = (np.flatnonzero(mask.to_numpy()) + 1).tolist()
+    if not row_numbers:
+        return ""
+    preview = ", ".join(str(num) for num in row_numbers[:max_rows])
+    suffix = "..." if len(row_numbers) > max_rows else ""
+    return f"Row numbers: {preview}{suffix}"
+
+
+def validate_location_input_requirements(location_df: pd.DataFrame) -> None:
+    location_ids = location_df["location_id"].fillna("").astype(str).str.strip()
+    missing_location_ids = location_ids == ""
+    if missing_location_ids.any():
+        raise ValueError(
+            "ALERT: Input must include non-blank location_id for every row. "
+            f"{summarize_row_numbers(missing_location_ids)}"
+        )
+
+    address_values = location_df["address_1"].fillna("").astype(str).str.strip()
+    zip_values = location_df["zip"].fillna("").astype(str).str.strip()
+    missing_address_or_zip = (address_values == "") & (zip_values == "")
+    if missing_address_or_zip.any():
+        raise ValueError(
+            "ALERT: Each input row must include either address or zip for LOCATION output generation. "
+            f"{summarize_row_numbers(missing_address_or_zip)}"
+        )
+
+
+def alert_location_history_output_gaps(
+    history: pd.DataFrame,
+    invalid_start_mask: Optional[pd.Series] = None,
+    invalid_end_mask: Optional[pd.Series] = None,
+) -> None:
+    missing_entity = history["entity_id"].fillna("").astype(str).str.strip() == ""
+    if missing_entity.any():
+        logger.warning(
+            "ALERT: LOCATION_HISTORY.entity_id is missing for some rows and will be left blank. "
+            f"{summarize_row_numbers(missing_entity)}"
+        )
+
+    missing_start = history["start_date"].fillna("").astype(str).str.strip() == ""
+    if missing_start.any():
+        logger.warning(
+            "ALERT: LOCATION_HISTORY.start_date is missing for some rows and will be left blank. "
+            f"{summarize_row_numbers(missing_start)}"
+        )
+
+    if invalid_start_mask is not None and invalid_start_mask.any():
+        logger.warning(
+            "ALERT: LOCATION_HISTORY.start_date contains invalid values for some rows and was blanked. "
+            f"{summarize_row_numbers(invalid_start_mask)}"
+        )
+
+    if invalid_end_mask is not None and invalid_end_mask.any():
+        logger.warning(
+            "ALERT: LOCATION_HISTORY.end_date contains invalid values for some rows and was blanked. "
+            f"{summarize_row_numbers(invalid_end_mask)}"
+        )
+
+
 def prepare_location_history_dataframe(source_df: pd.DataFrame, location_df: pd.DataFrame, existing_history: Optional[pd.DataFrame]) -> pd.DataFrame:
+    invalid_start_mask = pd.Series([False] * len(location_df), index=location_df.index)
+    invalid_end_mask = pd.Series([False] * len(location_df), index=location_df.index)
+
     if existing_history is not None:
         history = existing_history.copy()
         history.rename(columns={col: col.lower().strip() for col in history.columns}, inplace=True)
@@ -1175,56 +1260,59 @@ def prepare_location_history_dataframe(source_df: pd.DataFrame, location_df: pd.
             if col not in history.columns:
                 history[col] = pd.NA
         history = history[LOCATION_HISTORY_REQUIRED_COLUMNS].copy()
+
+        raw_start = history["start_date"].fillna("").astype(str).str.strip()
+        raw_end = history["end_date"].fillna("").astype(str).str.strip()
+        parsed_start = pd.to_datetime(raw_start, errors="coerce")
+        parsed_end = pd.to_datetime(raw_end, errors="coerce")
+        invalid_start_mask = (raw_start != "") & parsed_start.isna()
+        invalid_end_mask = (raw_end != "") & parsed_end.isna()
+        history["start_date"] = parsed_start.dt.strftime("%Y-%m-%d").fillna("")
+        history["end_date"] = parsed_end.dt.strftime("%Y-%m-%d").fillna("")
     else:
         history = pd.DataFrame()
         history["location_id"] = location_df["location_id"].values
         history["relationship_type_concept_id"] = DEFAULT_RELATIONSHIP_TYPE_CONCEPT_ID
         history["domain_id"] = DEFAULT_DOMAIN_ID
 
-        entity_series = source_df.get("entity_id")
-        if entity_series is None or entity_series.isna().all():
-            entity_series = source_df.get("person_id")
-        if entity_series is None:
-            entity_series = pd.Series(np.arange(1, len(source_df) + 1), index=source_df.index)
+        entity_series = coalesce_non_blank_columns(source_df, ["entity_id", "person_id"])
+        history["entity_id"] = entity_series
 
-        fallback_entity_series = pd.Series(np.arange(1, len(source_df) + 1), index=source_df.index)
-        history["entity_id"] = pd.to_numeric(entity_series, errors="coerce").fillna(fallback_entity_series).astype(int)
+        start_values = coalesce_non_blank_columns(source_df, ["start_date", "visit_start_date"])
+        year_values = source_df.get("year", pd.Series([""] * len(source_df), index=source_df.index)).fillna("").astype(str).str.strip()
+        year_only = year_values.str.extract(r"^(\d{4})$", expand=False).fillna("")
+        start_from_year_mask = (start_values == "") & (year_only != "")
+        if start_from_year_mask.any():
+            start_values.loc[start_from_year_mask] = year_only.loc[start_from_year_mask] + "-01-01"
+            logger.info(
+                "Auto-populated LOCATION_HISTORY.start_date from year as YYYY-01-01 for "
+                f"{int(start_from_year_mask.sum())} rows. end_date is left blank unless explicitly provided."
+            )
 
-        if "start_date" in source_df.columns and source_df["start_date"].notna().any():
-            start_dates = pd.to_datetime(source_df["start_date"], errors="coerce")
-        elif "year" in source_df.columns and source_df["year"].notna().any():
-            years = pd.to_numeric(source_df["year"], errors="coerce").fillna(1998).astype(int)
-            start_dates = pd.to_datetime(years.astype(str) + "-01-01", errors="coerce")
-        else:
-            start_dates = pd.Series([pd.NaT] * len(source_df), index=source_df.index)
+        end_values = coalesce_non_blank_columns(source_df, ["end_date", "visit_end_date"])
 
-        if "end_date" in source_df.columns and source_df["end_date"].notna().any():
-            end_dates = pd.to_datetime(source_df["end_date"], errors="coerce")
-        elif "year" in source_df.columns and source_df["year"].notna().any():
-            years = pd.to_numeric(source_df["year"], errors="coerce").fillna(2020).astype(int)
-            end_dates = pd.to_datetime(years.astype(str) + "-12-31", errors="coerce")
-        else:
-            end_dates = pd.Series([pd.NaT] * len(source_df), index=source_df.index)
-
-        history["start_date"] = pd.to_datetime(start_dates, errors="coerce").dt.strftime("%Y-%m-%d")
-        history["end_date"] = pd.to_datetime(end_dates, errors="coerce").dt.strftime("%Y-%m-%d")
+        parsed_start = pd.to_datetime(start_values, errors="coerce")
+        parsed_end = pd.to_datetime(end_values, errors="coerce")
+        invalid_start_mask = (start_values != "") & parsed_start.isna()
+        invalid_end_mask = (end_values != "") & parsed_end.isna()
+        history["start_date"] = parsed_start.dt.strftime("%Y-%m-%d").fillna("")
+        history["end_date"] = parsed_end.dt.strftime("%Y-%m-%d").fillna("")
 
     for col in ["relationship_type_concept_id", "domain_id"]:
         history[col] = pd.to_numeric(history[col], errors="coerce").fillna(
             DEFAULT_RELATIONSHIP_TYPE_CONCEPT_ID if col == "relationship_type_concept_id" else DEFAULT_DOMAIN_ID
         ).astype(int)
 
-    fallback_history_entity_series = pd.Series(np.arange(1, len(history) + 1), index=history.index)
-    history["entity_id"] = pd.to_numeric(history["entity_id"], errors="coerce").fillna(fallback_history_entity_series).astype(int)
+    history["location_id"] = history["location_id"].fillna("").astype(str).str.strip()
+    history["entity_id"] = history["entity_id"].fillna("").astype(str).str.strip()
     history["start_date"] = pd.to_datetime(history["start_date"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
     history["end_date"] = pd.to_datetime(history["end_date"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
 
-    missing_start = (history["start_date"] == "").sum()
-    if missing_start:
-        logger.warning(
-            f"Generated LOCATION_HISTORY contains {int(missing_start)} rows with blank start_date. "
-            "Provide start_date or year in source input for OMOP-compliant temporal mapping."
-        )
+    alert_location_history_output_gaps(
+        history=history,
+        invalid_start_mask=invalid_start_mask.reindex(history.index, fill_value=False),
+        invalid_end_mask=invalid_end_mask.reindex(history.index, fill_value=False),
+    )
 
     return history[LOCATION_HISTORY_REQUIRED_COLUMNS].copy()
 
@@ -1327,6 +1415,7 @@ def main():
     try:
         source_df, existing_history = load_input_data(input_folder)
         location_df = prepare_location_dataframe(source_df)
+        validate_location_input_requirements(location_df)
 
         zip9_reference = Zip9Reference()
         if not zip9_reference.base_path:
@@ -1347,18 +1436,21 @@ def main():
         location_df["country_source_value"] = location_df["country_source_value"].replace("", DEFAULT_COUNTRY_SOURCE_VALUE)
         location_df["country_source_value"] = location_df["country_source_value"].fillna(DEFAULT_COUNTRY_SOURCE_VALUE)
 
-        location_output = location_df[LOCATION_REQUIRED_COLUMNS + ["modifier_source_value"]].copy()
-        location_output_path = os.path.join(output_folder, "LOCATION.csv")
-        location_output.to_csv(location_output_path, index=False)
-        logger.info(f"LOCATION output generated: {location_output_path}")
-
         location_history_output = prepare_location_history_dataframe(source_df, location_df, existing_history)
         location_history_output_path = os.path.join(output_folder, "LOCATION_HISTORY.csv")
         location_history_output.to_csv(location_history_output_path, index=False)
         logger.info(f"LOCATION_HISTORY output generated: {location_history_output_path}")
 
+        location_output = location_df[LOCATION_REQUIRED_COLUMNS + ["modifier_source_value"]].copy()
+        location_output_path = os.path.join(output_folder, "LOCATION.csv")
+        location_output.to_csv(location_output_path, index=False)
+        logger.info(f"LOCATION output generated: {location_output_path}")
+
         write_geocoding_summary(location_df, output_folder)
         write_failure_report(location_df, output_folder)
+    except ValueError as ex:
+        logger.error(str(ex))
+        sys.exit(1)
     finally:
         cleanup_analysis_preprocessed_folder(analysis_folder)
 
