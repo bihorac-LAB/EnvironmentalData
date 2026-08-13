@@ -238,8 +238,6 @@ Rows that could not be geocoded are listed in `geocode_failures_<timestamp>.csv`
 **Purpose:**  
 Spatially joins the latitude and longitude from your `LOCATION` tables with geospatial indices (ADI, SVI, AHRQ) and produces `EXTERNAL_EXPOSURE.csv`.
 
-> 📖 The authoritative instructions for this container live in the [postgis-exposure README](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/README.md). The steps below mirror it and add the geocoding-specific context. **If the two ever disagree, follow the chorus README.**
-
 ---
 
 #### Prerequisites for GIS Linkage
