@@ -310,6 +310,23 @@ docker run --rm --name postgis-chorus \
 
 > `POSTGRES_PASSWORD=dummy` is safe as-is: the database is local to this throwaway container and is never exposed off-host.
 
+This brings up a Docker container locally with all dependencies needed to run the dataset retrieval and spatial joining processes.
+
+> **Alternative: build the image locally.** If your site cannot pull from `ghcr.io`, or you want to run modified code, build from the cloned repo instead. Reuse the same `VARIABLES` and `DATA_SOURCES` exports from Step 1.
+>
+> ```bash
+> docker build -t chorus-postgis-exposure-local .
+>
+> docker run --rm --name postgis-chorus \
+>     --env POSTGRES_PASSWORD="dummy" \
+>     --env VARIABLES="$VARIABLES" \
+>     --env DATA_SOURCES="$DATA_SOURCES" \
+>     -v ./test:/source \
+>     -d chorus-postgis-exposure-local:latest
+> ```
+>
+> Every later step is identical.
+
 **Step 3: Wait for the database to come up** (10-20 seconds depending on your environment). Confirm with:
 
 ```bash
@@ -323,6 +340,8 @@ Wait until you see **`database is ready to accept connections`** before continui
 ```bash
 docker exec postgis-chorus /app/produce_external_exposure.sh
 ```
+
+This retrieves the data sources and combines them with your data to produce the external exposure table.
 
 **Step 5: Collect the output.** `EXTERNAL_EXPOSURE.csv` will appear in your mounted `./test` directory.
 
