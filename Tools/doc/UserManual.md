@@ -42,7 +42,7 @@ This workflow uses **two separate Docker containers** to take patient addresses 
 1. **Exposome Geocoder Container (`prismaplab/exposome-geocoder:1.0.4`)**  
    Converts addresses or coordinates into OMOP `LOCATION` / `LOCATION_HISTORY` tables with latitude and longitude.
 
-2. **Exposome Linkage Container** — built locally from the [`postgis-exposure`](https://github.com/chorus-ai/chorus-container-apps/tree/main/postgis-exposure) repository  
+2. **Exposome Linkage Container**, built locally from [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) in this repository  
    Spatially joins those tables with environmental and social determinant datasets (ADI, SVI, EJI, AHRQ) to produce `EXTERNAL_EXPOSURE.csv`. Build this image from the cloned repository for now; the published `ghcr.io/chorus-ai/chorus-postgis-exposure:main` tag has not yet been rebuilt against the current code, though it will be shortly.
 
 The path is the same for every site:
@@ -78,7 +78,7 @@ Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/
 | 1           | 1250 W 16th St Jacksonville FL 32209         | 2019 | 1         |
 | 2           | 2001 SW 16th St Gainesville FL 32608         | 2019 | 2         |
 
-> ⚠️ **Required for every row:** a non-blank `location_id` (these are **not** auto-generated, so supply your own site-stable identifiers), and **either** an address **or** a ZIP code. The script exits with an error listing the offending rows if either condition is unmet.
+> ⚠️ **Required for every row:** a non-blank `location_id` (these are **not** auto-generated, so supply your own; they should be site specific), and address columns holding **either** a complete address **or**, at minimum, a ZIP code: the `street` / `city` / `state` / `zip` columns in Format A, or the single `address` column in Format B. The script exits with an error listing the offending rows if either condition is unmet.
 
 ---
 
@@ -90,6 +90,8 @@ Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/
 |-------------|------------|-----------|-----------|------|
 | 1           | 30.353463  | -81.6749  | 1         | 2015 |
 | 2           | 29.634219  | -82.3433  | 2         | 2015 |
+
+> ⚠️ **Required for every row:** a non-blank `location_id` (these are **not** auto-generated, so supply your own; they should be site specific). The script exits with an error listing the offending rows if any `location_id` is blank.
 
 ---
 
@@ -162,17 +164,6 @@ Ensure **Docker Desktop** is running.
 
 This step produces the `LOCATION.csv` and `LOCATION_HISTORY.csv` that the linkage container consumes in [Step 4](#step-4-gis-linkage-with-postgis-exposure-tool).
 
-Coordinates are resolved through a four-tier fallback, stopping at the first tier that succeeds:
-
-| Tier | Source | Default match threshold |
-|------|--------|------------------------|
-| 1 | Latitude/longitude already supplied | n/a |
-| 2 | Full street address | 0.7 |
-| 3 | ZIP9 to tract centroid | 0.3 |
-| 4 | ZIP5 to tract centroid | 0.1 |
-
-The tier used for each row is recorded in the `modifier_source_value` column of `LOCATION.csv` (for example, `Level 2 | lat/long generated from address`), so every coordinate carries its own provenance.
-
 #### For macOS / Linux / Ubuntu
 
 ```bash
@@ -197,6 +188,21 @@ docker run -it --rm   -v "$(pwd)":/workspace   -v /var/run/docker.sock:/var/run/
 ```
 
 > ℹ️ The script launches the DeGAUSS geocoder in a nested Docker container, which is why the command mounts the Docker socket and passes `HOST_PWD`. All geocoding runs **locally**; no address data leaves your machine.
+
+Coordinates are resolved through a four-tier fallback, stopping at the first tier that succeeds:
+
+| Tier | Information available | Threshold | Interpretation |
+|------|-----------------------|-----------|----------------|
+| 1 | Latitude/longitude already supplied | n/a | No matching needed |
+| 2 | Full street address | 0.7 | Requires a relatively strong address match |
+| 3 | ZIP9 with block-level crosswalk | 0.3 | Lower-confidence geographic match |
+| 4 | ZIP5 with ZIP-to-tract crosswalk | 0.1 | Least precise |
+
+**What the threshold means.** The threshold is a similarity cutoff for deciding whether a geographic match is good enough to accept. It is passed internally to DeGAUSS, which scores each candidate it finds from 0 to 1 on how closely that candidate matches the information submitted, and returns nothing for a candidate scoring below the tier's cutoff, so the row falls through to the next tier. The cutoff drops as the information available gets coarser, because a ZIP-only query cannot match as precisely as a full street address. Override the defaults with `GEOCODER_THRESHOLD_ADDRESS`, `GEOCODER_THRESHOLD_ZIP9`, and `GEOCODER_THRESHOLD_ZIP5` (see [Environment Variables](#environment-variables)).
+
+**What Tiers 3 and 4 do.** When no exact address is available, the script uses the ZIP information and a block-level geographic lookup to identify the most appropriate Census tract, then represents that tract with a point. The ZIP is checked against a crosswalk first, ZIP9 against the ZIP9 to FIPS12 crosswalk and ZIP5 against the HUD crosswalk, and the row is skipped if it does not validate.
+
+The tier used for each row is recorded in the `modifier_source_value` column of `LOCATION.csv` (for example, `Level 2 | lat/long generated from address`), so every coordinate carries its own provenance.
 
 ---
 
@@ -246,30 +252,30 @@ Four dataset families are available. All are joined at **Census tract** level, u
 
 | Dataset | Source | Vintages available | Variables |
 |---------|--------|--------------------|-----------|
-| **ADI** — Area Deprivation Index | UW-Madison (Zenodo) | 2015, 2020, 2023 | 6 |
-| **SVI** — Social Vulnerability Index | CDC/ATSDR | 2010, 2014, 2016, 2018, 2020, 2022 | 651 |
-| **EJI** — Environmental Justice Index | CDC/ATSDR | 2022, 2024 | 239 |
-| **AHRQ SDOH** — Social Determinants of Health | AHRQ (Zenodo) | 2009–2023, annual | 4,195 |
-
-**How the ID numbers map to datasets.** The two centrally managed CSVs are the lookup tables for the numbers you pass in [Step 1](#gis-linkage-workflow) below:
-
-| File | Column to use | Maps to |
-|------|---------------|---------|
-| [`VRBL_SRC_SIMPLE.csv`](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/csv/VRBL_SRC_SIMPLE.csv) | `variable_source_id` → `VARIABLES` | One row per variable. `variable_name` is what lands in `exposure_source_value`; `dataset_type` says which family it belongs to (`ADI`, `SVI`, `EJI`, `AHRQ`). |
-| [`DATA_SRC_SIMPLE.csv`](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/csv/DATA_SRC_SIMPLE.csv) | `data_source_uuid` → `DATA_SOURCES` | One row per dataset **vintage** (dataset + year), with its download URL and documentation link. |
-
-To confirm what a given ID is before requesting it, look the number up in the relevant file. For example, `variable_source_id` `96` resolves to its `variable_name` and `dataset_type` in `VRBL_SRC_SIMPLE.csv`; `data_source_uuid` `9922` is SVI's 2022 tract release in `DATA_SRC_SIMPLE.csv`.
+| **ADI**: Area Deprivation Index | [UW-Madison (Zenodo)](https://doi.org/10.5281/zenodo.19475818) | 2015, 2020, 2023 | 6 |
+| **SVI**: Social Vulnerability Index | [CDC/ATSDR](https://www.atsdr.cdc.gov/placeandhealth/svi/index.html) | 2010, 2014, 2016, 2018, 2020, 2022 | 651 |
+| **EJI**: Environmental Justice Index | [CDC/ATSDR](https://www.atsdr.cdc.gov/place-health/php/eji/index.html) | 2022, 2024 | 239 |
+| **AHRQ SDOH**: Social Determinants of Health | [AHRQ (Zenodo)](https://doi.org/10.5281/zenodo.19475914) | 2009–2023, annual | 4,195 |
 
 ---
 
 #### Prerequisites for GIS Linkage
 - Docker installed.
-- Clone the [postgis-exposure repository](https://github.com/chorus-ai/chorus-container-apps/tree/main/postgis-exposure) and run all commands **from the `postgis-exposure` directory**.
+- Clone this repository and run all commands **from the [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) directory**.
 - `LOCATION.csv` and `LOCATION_HISTORY.csv` produced in [Step 2](#step-2-generate-location-tables).
 - Ensure `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv` files are available (centrally managed; no edits required).
 - **Important:** Do **not** date-shift your `LOCATION` / `LOCATION_HISTORY` files before linkage.
 
-Sample `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv`: [here](https://github.com/chorus-ai/chorus-container-apps/tree/main/postgis-exposure/csv)
+Sample `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv`: [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure/csv)
+
+**How the ID numbers map to datasets.** The two centrally managed CSVs are the lookup tables for the numbers you pass in [Step 1](#gis-linkage-workflow) below:
+
+| File | Column to use | Maps to |
+|------|---------------|---------|
+| [`VRBL_SRC_SIMPLE.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/csv/VRBL_SRC_SIMPLE.csv) | `variable_source_id` → `VARIABLES` | One row per variable. `variable_name` is what lands in `exposure_source_value`; `dataset_type` says which family it belongs to (`ADI`, `SVI`, `EJI`, `AHRQ`). |
+| [`DATA_SRC_SIMPLE.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/csv/DATA_SRC_SIMPLE.csv) | `data_source_uuid` → `DATA_SOURCES` | One row per dataset **vintage** (dataset + year), with its download URL and documentation link. |
+
+To confirm what a given ID is before requesting it, look the number up in the relevant file. For example, `variable_source_id` `96` resolves to its `variable_name` and `dataset_type` in `VRBL_SRC_SIMPLE.csv`; `data_source_uuid` `9922` is SVI's 2022 tract release in `DATA_SRC_SIMPLE.csv`.
 
 ---
 
@@ -296,7 +302,7 @@ export VARIABLES="96,98,100,102,110,112,116,118,120,122,126,127,128,129,130,131,
 export DATA_SOURCES="7700,9910,9914,9916,9918,9920,9922,8822,8824,10515,10520,10523,11209,11210,11211,11212,11213,11214,11215,11216,11217,11218,11219,11220,11221,11222,11223"
 ```
 
-> These are the full canonical lists, reproduced verbatim from the [postgis-exposure README](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/README.md#deploy), which remains the authoritative source. If you are re-running after a while, check there for the current set. `VARIABLES` IDs come from `VRBL_SRC_SIMPLE.csv`; `DATA_SOURCES` IDs from `DATA_SRC_SIMPLE.csv`.
+> These are the full canonical lists, reproduced verbatim from the [postgis-exposure README](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/README.md#deploy), which remains the authoritative source. If you are re-running after a while, check there for the current set. `VARIABLES` IDs come from `VRBL_SRC_SIMPLE.csv`; `DATA_SOURCES` IDs from `DATA_SRC_SIMPLE.csv`.
 
 **Step 2: Build the image and start the Postgres/PostGIS container.**
 
@@ -402,8 +408,8 @@ See [Date Shifting SOP for More Details](https://github.com/chorus-ai/Chorus_SOP
 - Sample files: [Geocoding Demo Files](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo)
 
 #### GIS Linkage
-- **Container documentation:** [postgis-exposure README](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/README.md): authoritative source for the linkage container's deploy commands and the current `VARIABLES` / `DATA_SOURCES` lists.
-- Sample files: [PostGIS Exposure CSVs](https://github.com/chorus-ai/chorus-container-apps/tree/main/postgis-exposure/csv)
+- **Container documentation:** [postgis-exposure README](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/README.md): authoritative source for the linkage container's deploy commands and the current `VARIABLES` / `DATA_SOURCES` lists.
+- Sample files: [PostGIS Exposure CSVs](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure/csv)
   - **Site-specific:** `LOCATION`, `LOCATION_HISTORY`
   - **Centrally managed:** `DATA_SRC_SIMPLE`, `VRBL_SRC_SIMPLE`
 - Sample linkage output: [demo/PostGIS-output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/PostGIS-output)
