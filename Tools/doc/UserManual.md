@@ -261,7 +261,7 @@ Four dataset families are available. All are joined at **Census tract** level, u
 
 #### Prerequisites for GIS Linkage
 - Docker installed.
-- Clone this repository and run all commands **from the [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) directory**.
+- A clone of this repository. All linkage commands run from the [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) directory; [Step 0](#gis-linkage-workflow) below has the commands.
 - `LOCATION.csv` and `LOCATION_HISTORY.csv` produced in [Step 2](#step-2-generate-location-tables).
 - Ensure `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv` files are available (centrally managed; no edits required).
 - **Important:** Do **not** date-shift your `LOCATION` / `LOCATION_HISTORY` files before linkage.
@@ -288,12 +288,21 @@ Sample file [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/To
 
 #### GIS Linkage Workflow
 
-**Step 0: Stage your input files.** Copy `LOCATION.csv` and `LOCATION_HISTORY.csv` from your geocoder `output/` folder into the `test/` directory of the cloned repo. The container reads them from the mount; there is **no separate ingest command**.
+**Step 0: Get the code and stage your input files.** Clone this repository and change into the linkage directory:
+
+```bash
+git clone https://github.com/bihorac-LAB/EnvironmentalData.git
+cd EnvironmentalData/Tools/postgis-exposure
+```
+
+Then copy `LOCATION.csv` and `LOCATION_HISTORY.csv` from your geocoder `output/` folder into `test/`. The container reads them from the mount; there is **no separate ingest command**.
 
 ```bash
 cp /path/to/output/LOCATION.csv         ./test/
 cp /path/to/output/LOCATION_HISTORY.csv ./test/
 ```
+
+> ⚠️ **Every remaining command in this step runs from `Tools/postgis-exposure`.** The `docker build .` in Step 2 and the `-v ./test:/source` mount are both relative to it, so they fail or mount the wrong folder if you have changed directory.
 
 **Step 1: Set the variable and data-source lists.**
 
@@ -306,7 +315,7 @@ export DATA_SOURCES="7700,9910,9914,9916,9918,9920,9922,8822,8824,10515,10520,10
 
 **Step 2: Build the image and start the Postgres/PostGIS container.**
 
-Build from the `postgis-exposure` directory of the repository you cloned in the [prerequisites](#prerequisites-for-gis-linkage), then start the container. Both commands reuse the `VARIABLES` and `DATA_SOURCES` exports from Step 1.
+Build the image, then start the container. Both commands run from `Tools/postgis-exposure` and reuse the `VARIABLES` and `DATA_SOURCES` exports from Step 1.
 
 ```bash
 docker build -t chorus-postgis-exposure-local .
@@ -351,9 +360,9 @@ docker stop postgis-chorus
 
 #### Notes & Tips
 - Run these commands in Terminal (Mac) or WSL/PowerShell/Command Prompt on Windows; WSL is more robust for Docker on Windows.
-- Run all commands from the `postgis-exposure` directory; the `-v ./test:/source` mount is relative to it.
+- Run all commands from the `Tools/postgis-exposure` directory; the `-v ./test:/source` mount is relative to it.
 - If your site needs more variables, expand `VARIABLES` accordingly.
-- **Important**: The container may only run successfully once. To rerun, you may need to delete the container and image, then pull the image again.
+- **Important**: The container may only run successfully once. To rerun, you may need to delete the container and image, then rebuild.
 
 ---
 
