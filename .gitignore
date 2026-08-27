@@ -6,3 +6,9 @@ tmp/*
 Tools/SDOH/Address-to-fips/*
 
 input_csvs/
+
+/reference_codes/
+/Tools/demo/public_nad_test
+/.github
+*.md
+*.docx
