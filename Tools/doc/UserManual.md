@@ -29,11 +29,10 @@ This repository provides a **reproducible workflow** to geocode patient location
     - [Step 7: Upload \& Centralized De-identification](#step-7-upload--centralized-de-identification)
   - [References \& sample files](#references--sample-files)
   - [Related Office Hours](#related-office-hours)
-  - [Appendix A: Geocoding Workflow](#appendix-a-geocoding-workflow)
+  - [Appendix: Geocoding Workflow](#appendix-geocoding-workflow)
     - [Method: DeGAUSS Toolkit (Docker-based)](#method-degauss-toolkit-docker-based)
     - [Script Reference](#script-reference)
     - [Environment Variables](#environment-variables)
-  - [Appendix B: FIPS Codes (UF Web Platform only)](#appendix-b-fips-codes-uf-web-platform-only)
 ---
 
 ## Overview
@@ -43,8 +42,8 @@ This workflow uses **two separate Docker containers** to take patient addresses 
 1. **Exposome Geocoder Container (`prismaplab/exposome-geocoder:1.0.4`)**  
    Converts addresses or coordinates into OMOP `LOCATION` / `LOCATION_HISTORY` tables with latitude and longitude.
 
-2. **Exposome Linkage Container (`ghcr.io/chorus-ai/chorus-postgis-exposure:main`)**  
-   Spatially joins those tables with environmental and social determinant datasets (ADI, SVI, EJI, AHRQ) to produce `EXTERNAL_EXPOSURE.csv`.
+2. **Exposome Linkage Container**, built locally from [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) in this repository  
+   Spatially joins those tables with environmental and social determinant datasets (ADI, SVI, EJI, AHRQ) to produce `EXTERNAL_EXPOSURE.csv`. Build this image from the cloned repository for now; the published `ghcr.io/chorus-ai/chorus-postgis-exposure:main` tag has not yet been rebuilt against the current code, though it will be shortly.
 
 The path is the same for every site:
 
@@ -54,8 +53,6 @@ Your data  →  Step 2: Address_to_LOCATION.py  →  LOCATION.csv          →  
 ```
 
 > ⚠️ **Version note:** Use **`1.0.4` or later**. The `Address_to_LOCATION.py` script and the ZIP9/HUD crosswalk reference data it depends on are **not present in `1.0.3` or earlier**.
-
-> **A note on FIPS codes.** Earlier versions of this toolkit centred on generating Census Tract (FIPS 11-digit) codes. **Linkage does not use FIPS.** It joins on latitude and longitude, and `LOCATION.csv` deliberately contains no `FIPS` column. You can ignore FIPS entirely unless you are also uploading to the UF Environmental Data Web Platform, which is internal to UF and covered in [Appendix B](#appendix-b-fips-codes-uf-web-platform-only).
 
 ---
 
@@ -81,7 +78,7 @@ Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/
 | 1           | 1250 W 16th St Jacksonville FL 32209         | 2019 | 1         |
 | 2           | 2001 SW 16th St Gainesville FL 32608         | 2019 | 2         |
 
-> ⚠️ **Required for every row:** a non-blank `location_id` (these are **not** auto-generated, so supply your own site-stable identifiers), and **either** an address **or** a ZIP code. The script exits with an error listing the offending rows if either condition is unmet.
+> ⚠️ **Required for every row:** a non-blank `location_id` (these are **not** auto-generated, so supply your own; they should be site specific), and address columns holding **either** a complete address **or**, at minimum, a ZIP code: the `street` / `city` / `state` / `zip` columns in Format A, or the single `address` column in Format B. The script exits with an error listing the offending rows if either condition is unmet.
 
 ---
 
@@ -93,6 +90,8 @@ Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/
 |-------------|------------|-----------|-----------|------|
 | 1           | 30.353463  | -81.6749  | 1         | 2015 |
 | 2           | 29.634219  | -82.3433  | 2         | 2015 |
+
+> ⚠️ **Required for every row:** a non-blank `location_id` (these are **not** auto-generated, so supply your own; they should be site specific). The script exits with an error listing the offending rows if any `location_id` is blank.
 
 ---
 
@@ -106,8 +105,6 @@ If your source data already lives in an OMOP CDM database, extract the following
 | visit_occurrence   | visit_occurrence_id, visit_start_date, visit_end_date, person_id |
 | location           | location_id, address_1, address_2, city, state, zip, location_source_value, country_concept_id, country_source_value, latitude, longitude |
 | location_history   | location_id, relationship_type_concept_id, domain_id, entity_id, start_date, end_date |
-
-The `OMOP_to_FIPS.py` script can perform this extraction for you directly from SQL Server; see [Appendix B](#appendix-b-fips-codes-uf-web-platform-only) for its usage.
 
 ---
 
@@ -124,11 +121,15 @@ If these files are provided during **geocoding**, the output will automatically 
 
 ##### LOCATION.csv (Follows CDM format)
 
+Sample file [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/PostGIS-output/LOCATION.csv)
+
 | location_id | address_1 | address_2 | city | state | zip | county | location_source_value | country_concept_id | country_source_value | latitude | longitude |
 |-------------|-----------|-----------|------|-------|-----|--------|----------------------|-------------------|---------------------|----------|-----------|
 | 1           | 1248 N Blackstone Ave | | FRESNO | CA | 93703 | | UNITED STATES OF AMERICA | | UNITED STATES OF AMERICA | 36.75891146 | -119.7902719 |
 
 ##### LOCATION_HISTORY.csv (Follows CDM format)
+
+Sample file [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/PostGIS-output/LOCATION_HISTORY.csv)
 
 | location_id | relationship_type_concept_id | domain_id | entity_id | start_date | end_date |
 |-------------|------------------------------|-----------|-----------|------------|----------|
@@ -163,17 +164,6 @@ Ensure **Docker Desktop** is running.
 
 This step produces the `LOCATION.csv` and `LOCATION_HISTORY.csv` that the linkage container consumes in [Step 4](#step-4-gis-linkage-with-postgis-exposure-tool).
 
-Coordinates are resolved through a four-tier fallback, stopping at the first tier that succeeds:
-
-| Tier | Source | Default match threshold |
-|------|--------|------------------------|
-| 1 | Latitude/longitude already supplied | n/a |
-| 2 | Full street address | 0.7 |
-| 3 | ZIP9 to tract centroid | 0.3 |
-| 4 | ZIP5 to tract centroid | 0.1 |
-
-The tier used for each row is recorded in the `modifier_source_value` column of `LOCATION.csv` (for example, `Level 2 | lat/long generated from address`), so every coordinate carries its own provenance.
-
 #### For macOS / Linux / Ubuntu
 
 ```bash
@@ -198,6 +188,21 @@ docker run -it --rm   -v "$(pwd)":/workspace   -v /var/run/docker.sock:/var/run/
 ```
 
 > ℹ️ The script launches the DeGAUSS geocoder in a nested Docker container, which is why the command mounts the Docker socket and passes `HOST_PWD`. All geocoding runs **locally**; no address data leaves your machine.
+
+Coordinates are resolved through a four-tier fallback, stopping at the first tier that succeeds:
+
+| Tier | Information available | Threshold | Interpretation |
+|------|-----------------------|-----------|----------------|
+| 1 | Latitude/longitude already supplied | n/a | No matching needed |
+| 2 | Full street address | 0.7 | Requires a relatively strong address match |
+| 3 | ZIP9 with block-level crosswalk | 0.3 | Lower-confidence geographic match |
+| 4 | ZIP5 with ZIP-to-tract crosswalk | 0.1 | Least precise |
+
+**What the threshold means.** The threshold is a similarity cutoff for deciding whether a geographic match is good enough to accept. It is passed internally to DeGAUSS, which scores each candidate it finds from 0 to 1 on how closely that candidate matches the information submitted, and returns nothing for a candidate scoring below the tier's cutoff, so the row falls through to the next tier. The cutoff drops as the information available gets coarser, because a ZIP-only query cannot match as precisely as a full street address. Override the defaults with `GEOCODER_THRESHOLD_ADDRESS`, `GEOCODER_THRESHOLD_ZIP9`, and `GEOCODER_THRESHOLD_ZIP5` (see [Environment Variables](#environment-variables)).
+
+**What Tiers 3 and 4 do.** When no exact address is available, the script uses the ZIP information and a block-level geographic lookup to identify the most appropriate Census tract, then represents that tract with a point. The ZIP is checked against a crosswalk first, ZIP9 against the ZIP9 to FIPS12 crosswalk and ZIP5 against the HUD crosswalk, and the row is skipped if it does not validate.
+
+The tier used for each row is recorded in the `modifier_source_value` column of `LOCATION.csv` (for example, `Level 2 | lat/long generated from address`), so every coordinate carries its own provenance.
 
 ---
 
@@ -247,46 +252,57 @@ Four dataset families are available. All are joined at **Census tract** level, u
 
 | Dataset | Source | Vintages available | Variables |
 |---------|--------|--------------------|-----------|
-| **ADI** — Area Deprivation Index | UW-Madison (Zenodo) | 2015, 2020, 2023 | 6 |
-| **SVI** — Social Vulnerability Index | CDC/ATSDR | 2010, 2014, 2016, 2018, 2020, 2022 | 651 |
-| **EJI** — Environmental Justice Index | CDC/ATSDR | 2022, 2024 | 239 |
-| **AHRQ SDOH** — Social Determinants of Health | AHRQ (Zenodo) | 2009–2023, annual | 4,195 |
-
-**How the ID numbers map to datasets.** The two centrally managed CSVs are the lookup tables for the numbers you pass in [Step 1](#gis-linkage-workflow) below:
-
-| File | Column to use | Maps to |
-|------|---------------|---------|
-| [`VRBL_SRC_SIMPLE.csv`](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/csv/VRBL_SRC_SIMPLE.csv) | `variable_source_id` → `VARIABLES` | One row per variable. `variable_name` is what lands in `exposure_source_value`; `dataset_type` says which family it belongs to (`ADI`, `SVI`, `EJI`, `AHRQ`). |
-| [`DATA_SRC_SIMPLE.csv`](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/csv/DATA_SRC_SIMPLE.csv) | `data_source_uuid` → `DATA_SOURCES` | One row per dataset **vintage** (dataset + year), with its download URL and documentation link. |
-
-To confirm what a given ID is before requesting it, look the number up in the relevant file. For example, `variable_source_id` `96` resolves to its `variable_name` and `dataset_type` in `VRBL_SRC_SIMPLE.csv`; `data_source_uuid` `9922` is SVI's 2022 tract release in `DATA_SRC_SIMPLE.csv`.
+| **ADI**: Area Deprivation Index | [UW-Madison (Zenodo)](https://doi.org/10.5281/zenodo.19475818) | 2015, 2020, 2023 | 6 |
+| **SVI**: Social Vulnerability Index | [CDC/ATSDR](https://www.atsdr.cdc.gov/placeandhealth/svi/index.html) | 2010, 2014, 2016, 2018, 2020, 2022 | 651 |
+| **EJI**: Environmental Justice Index | [CDC/ATSDR](https://www.atsdr.cdc.gov/place-health/php/eji/index.html) | 2022, 2024 | 239 |
+| **AHRQ SDOH**: Social Determinants of Health | [AHRQ (Zenodo)](https://doi.org/10.5281/zenodo.19475914) | 2009–2023, annual | 4,195 |
 
 ---
 
 #### Prerequisites for GIS Linkage
 - Docker installed.
-- Clone the [postgis-exposure repository](https://github.com/chorus-ai/chorus-container-apps/tree/main/postgis-exposure) and run all commands **from the `postgis-exposure` directory**.
+- A clone of this repository. All linkage commands run from the [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) directory; [Step 0](#gis-linkage-workflow) below has the commands.
 - `LOCATION.csv` and `LOCATION_HISTORY.csv` produced in [Step 2](#step-2-generate-location-tables).
 - Ensure `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv` files are available (centrally managed; no edits required).
 - **Important:** Do **not** date-shift your `LOCATION` / `LOCATION_HISTORY` files before linkage.
 
-Sample `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv`: [here](https://github.com/chorus-ai/chorus-container-apps/tree/main/postgis-exposure/csv)
+Sample `DATA_SRC_SIMPLE.csv` and `VRBL_SRC_SIMPLE.csv`: [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure/csv)
+
+**How the ID numbers map to datasets.** The two centrally managed CSVs are the lookup tables for the numbers you pass in [Step 1](#gis-linkage-workflow) below:
+
+| File | Column to use | Maps to |
+|------|---------------|---------|
+| [`VRBL_SRC_SIMPLE.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/csv/VRBL_SRC_SIMPLE.csv) | `variable_source_id` → `VARIABLES` | One row per variable. `variable_name` is what lands in `exposure_source_value`; `dataset_type` says which family it belongs to (`ADI`, `SVI`, `EJI`, `AHRQ`). |
+| [`DATA_SRC_SIMPLE.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/csv/DATA_SRC_SIMPLE.csv) | `data_source_uuid` → `DATA_SOURCES` | One row per dataset **vintage** (dataset + year), with its download URL and documentation link. |
+
+To confirm what a given ID is before requesting it, look the number up in the relevant file. For example, `variable_source_id` `96` resolves to its `variable_name` and `dataset_type` in `VRBL_SRC_SIMPLE.csv`; `data_source_uuid` `9922` is SVI's 2022 tract release in `DATA_SRC_SIMPLE.csv`.
 
 ---
 
 #### Expected Outputs
 - `EXTERNAL_EXPOSURE.csv` containing linked indices (ADI, SVI, EJI, AHRQ metrics).
 
+Sample file [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/PostGIS-output/EXTERNAL_EXPOSURE.csv)
+
 ---
 
 #### GIS Linkage Workflow
 
-**Step 0: Stage your input files.** Copy `LOCATION.csv` and `LOCATION_HISTORY.csv` from your geocoder `output/` folder into the `test/` directory of the cloned repo. The container reads them from the mount; there is **no separate ingest command**.
+**Step 0: Get the code and stage your input files.** Clone this repository and change into the linkage directory:
+
+```bash
+git clone https://github.com/bihorac-LAB/EnvironmentalData.git
+cd EnvironmentalData/Tools/postgis-exposure
+```
+
+Then copy `LOCATION.csv` and `LOCATION_HISTORY.csv` from your geocoder `output/` folder into `test/`. The container reads them from the mount; there is **no separate ingest command**.
 
 ```bash
 cp /path/to/output/LOCATION.csv         ./test/
 cp /path/to/output/LOCATION_HISTORY.csv ./test/
 ```
+
+> ⚠️ **Every remaining command in this step runs from `Tools/postgis-exposure`.** The `docker build .` in Step 2 and the `-v ./test:/source` mount are both relative to it, so they fail or mount the wrong folder if you have changed directory.
 
 **Step 1: Set the variable and data-source lists.**
 
@@ -295,37 +311,28 @@ export VARIABLES="96,98,100,102,110,112,116,118,120,122,126,127,128,129,130,131,
 export DATA_SOURCES="7700,9910,9914,9916,9918,9920,9922,8822,8824,10515,10520,10523,11209,11210,11211,11212,11213,11214,11215,11216,11217,11218,11219,11220,11221,11222,11223"
 ```
 
-> These are the full canonical lists, reproduced verbatim from the [postgis-exposure README](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/README.md#deploy), which remains the authoritative source. If you are re-running after a while, check there for the current set. `VARIABLES` IDs come from `VRBL_SRC_SIMPLE.csv`; `DATA_SOURCES` IDs from `DATA_SRC_SIMPLE.csv`.
+> These are the full canonical lists, reproduced verbatim from the [postgis-exposure README](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/README.md#deploy), which remains the authoritative source. If you are re-running after a while, check there for the current set. `VARIABLES` IDs come from `VRBL_SRC_SIMPLE.csv`; `DATA_SOURCES` IDs from `DATA_SRC_SIMPLE.csv`.
 
-**Step 2: Start the Postgres/PostGIS container.**
+**Step 2: Build the image and start the Postgres/PostGIS container.**
+
+Build the image, then start the container. Both commands run from `Tools/postgis-exposure` and reuse the `VARIABLES` and `DATA_SOURCES` exports from Step 1.
 
 ```bash
+docker build -t chorus-postgis-exposure-local .
+
 docker run --rm --name postgis-chorus \
     --env POSTGRES_PASSWORD="dummy" \
     --env VARIABLES="$VARIABLES" \
     --env DATA_SOURCES="$DATA_SOURCES" \
     -v ./test:/source \
-    -d ghcr.io/chorus-ai/chorus-postgis-exposure:main
+    -d chorus-postgis-exposure-local:latest
 ```
+
+> ℹ️ **Build locally rather than pulling the published image.** `ghcr.io/chorus-ai/chorus-postgis-exposure:main` has not yet been rebuilt against the current code, so it may not match what this guide describes. A refreshed image is expected soon; once it lands you can swap `-d chorus-postgis-exposure-local:latest` for `-d ghcr.io/chorus-ai/chorus-postgis-exposure:main` and drop the `docker build` line. Every later step is identical either way.
 
 > `POSTGRES_PASSWORD=dummy` is safe as-is: the database is local to this throwaway container and is never exposed off-host.
 
 This brings up a Docker container locally with all dependencies needed to run the dataset retrieval and spatial joining processes.
-
-> **Alternative: build the image locally.** If your site cannot pull from `ghcr.io`, or you want to run modified code, build from the cloned repo instead. Reuse the same `VARIABLES` and `DATA_SOURCES` exports from Step 1.
->
-> ```bash
-> docker build -t chorus-postgis-exposure-local .
->
-> docker run --rm --name postgis-chorus \
->     --env POSTGRES_PASSWORD="dummy" \
->     --env VARIABLES="$VARIABLES" \
->     --env DATA_SOURCES="$DATA_SOURCES" \
->     -v ./test:/source \
->     -d chorus-postgis-exposure-local:latest
-> ```
->
-> Every later step is identical.
 
 **Step 3: Wait for the database to come up** (10-20 seconds depending on your environment). Confirm with:
 
@@ -353,9 +360,9 @@ docker stop postgis-chorus
 
 #### Notes & Tips
 - Run these commands in Terminal (Mac) or WSL/PowerShell/Command Prompt on Windows; WSL is more robust for Docker on Windows.
-- Run all commands from the `postgis-exposure` directory; the `-v ./test:/source` mount is relative to it.
+- Run all commands from the `Tools/postgis-exposure` directory; the `-v ./test:/source` mount is relative to it.
 - If your site needs more variables, expand `VARIABLES` accordingly.
-- **Important**: The container may only run successfully once. To rerun, you may need to delete the container and image, then pull the image again.
+- **Important**: The container may only run successfully once. To rerun, you may need to delete the container and image, then rebuild.
 
 ---
 
@@ -410,8 +417,8 @@ See [Date Shifting SOP for More Details](https://github.com/chorus-ai/Chorus_SOP
 - Sample files: [Geocoding Demo Files](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo)
 
 #### GIS Linkage
-- **Container documentation:** [postgis-exposure README](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/README.md): authoritative source for the linkage container's deploy commands and the current `VARIABLES` / `DATA_SOURCES` lists.
-- Sample files: [PostGIS Exposure CSVs](https://github.com/chorus-ai/chorus-container-apps/tree/main/postgis-exposure/csv)
+- **Container documentation:** [postgis-exposure README](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/README.md): authoritative source for the linkage container's deploy commands and the current `VARIABLES` / `DATA_SOURCES` lists.
+- Sample files: [PostGIS Exposure CSVs](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure/csv)
   - **Site-specific:** `LOCATION`, `LOCATION_HISTORY`
   - **Centrally managed:** `DATA_SRC_SIMPLE`, `VRBL_SRC_SIMPLE`
 - Sample linkage output: [demo/PostGIS-output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/PostGIS-output)
@@ -440,7 +447,7 @@ The following office hour sessions provide additional context and demonstrations
 
 ---
 
-## Appendix A: Geocoding Workflow
+## Appendix: Geocoding Workflow
 
 This appendix outlines the scripts and Docker-based DeGAUSS toolkit used internally by [Step 2](#step-2-generate-location-tables).
 
@@ -499,109 +506,3 @@ All are optional; defaults are applied when unset.
 > 🔒 **Privacy note on `ENABLE_GEOPY_PARSE`.** This variable is **off by default and should stay off**. When set to `1`, the script sends normalized addresses to **Nominatim, OpenStreetMap's public geocoding web service**, which means address data leaves your environment. This is incompatible with this toolkit's stated guarantee of local-only processing. Do not enable it on patient data.
 >
 > Note that the unrelated `pgeocode.Nominatim` used internally for ZIP centroid lookups is a **local offline dataset** and performs no network calls. The two share a name but are not the same thing.
-
----
-
-## Appendix B: FIPS Codes (UF Web Platform only)
-
-> **Most sites can skip this appendix entirely.** FIPS codes are **not** used by the CHoRUS exposome linkage in [Step 4](#step-4-gis-linkage-with-postgis-exposure-tool), which joins on latitude and longitude. This appendix applies only if you are also uploading to the UF Environmental Data Web Platform, which is internal to UF.
-
-`LOCATION.csv` never contains a `FIPS` column. `LOCATION` is a fixed-schema OMOP CDM table and the linkage container does not read FIPS, so adding it has no effect. FIPS codes are written to a separate `<filename>_with_fips.csv` instead. This is intentional; please do not patch FIPS back into `LOCATION.csv`.
-
-### Generating FIPS Codes
-
-FIPS generation adds a second DeGAUSS container that converts coordinates to Census Tract identifiers:
-
-| Purpose                  | Docker Image                                     |
-|--------------------------|--------------------------------------------------|
-| Coordinates to FIPS      | `ghcr.io/degauss-org/census_block_group:0.6.0`   |
-
-#### For CSV Input (Option 1 & 2)
-
-```bash
-docker run -it --rm \
-  -v "$(pwd)":/workspace \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -e HOST_PWD="$(pwd)" \
-  -w /workspace \
-  prismaplab/exposome-geocoder:1.0.4 \
-  /app/code/Address_to_FIPS.py -i <input_folder_path>
-```
-
-`Address_to_FIPS.py` reads CSV files, normalizes the address or uses supplied coordinates, runs both DeGAUSS containers, and packages outputs into ZIP archives.
-
-**Files generated.** Each input file produces:
-  - `<filename>_with_coordinates.csv`: input + latitude/longitude  
-  - `<filename>_with_fips.csv`: input + FIPS codes  
-
-```
-output/
-├── coordinates_from_address_<timestamp>.zip
-├── geocoded_fips_codes_<timestamp>.zip
-```
-
-> `<timestamp>` indicates when the script was executed (for example, 20250624_150230).
-
-**Zipped output columns**
-
-| Column           | Description                                                                 |
-|------------------|-----------------------------------------------------------------------------|
-| `Latitude`       | Latitude returned from the geocoder                                         |
-| `Longitude`      | Longitude returned from the geocoder                                        |
-| `geocode_result` | Outcome of geocoding: `geocoded` for successful matches, `Imprecise Geocode` if not precise |
-| `reason`         | Failure reason if applicable                                                |
-
-> 💡 **Tip:** You can expand hospital detection by adding known addresses to `HOSPITAL_ADDRESSES` in [`Address_to_FIPS.py`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/code/Address_to_FIPS.py). Format: single-line string, lowercase letters and numbers only, no commas or special characters, fields separated by single spaces.
-
-#### For OMOP Input (Option 3)
-
-To extract and geocode directly from an OMOP SQL Server database:
-
-```bash
-docker run -it --rm \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$(pwd)":/workspace \
-  -e HOST_PWD="$(pwd)" \
-  -w /workspace \
-  prismaplab/exposome-geocoder:1.0.4 \
-  /app/code/OMOP_to_FIPS.py \
-    --user <your_username> \
-    --password <your_password> \
-    --server <server_address> \
-    --port <port_number> \
-    --database <database_name>
-```
-
-`OMOP_to_FIPS.py` extracts OMOP CDM data, categorizes records into valid/invalid address or coordinates, runs FIPS generation, and also writes `LOCATION.csv` and `LOCATION_HISTORY.csv`.
-
-**Sample outputs:** [demo/OMOP/output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/OMOP/output)
-
-```
-OMOP_data/
-├── valid_address/               # Records with address, no lat/lon
-├── invalid_lat_lon_address/     # Records missing both address and lat/lon
-├── valid_lat_long/              # Records with lat/lon
-
-OMOP_FIPS_result/
-├── address/
-│   ├── address_with_coordinates.zip   # CSVs with lat/lon from address
-│   └── address_with_fips.zip          # CSVs with FIPS codes
-├── latlong/
-│   └── latlong_with_fips.zip          # CSVs with FIPS from coordinates
-├── invalid/                           # Usually empty; no usable location data
-
-LOCATION.csv
-LOCATION_HISTORY.csv
-```
-
-### Uploading to the UF Environmental Data Web Platform
-
-1. Register at [https://exposome.rc.ufl.edu](https://exposome.rc.ufl.edu/)  
-2. Upload the `*_with_fips.zip` file generated above
-3. Input CSV must contain:  
-   - `person_id`  
-   - `visit_occurrence_id`  
-   - `year`  
-   - `FIPS`
-4. Select the dataset you want to link it to
-5. Download enriched dataset with SDoH variables
