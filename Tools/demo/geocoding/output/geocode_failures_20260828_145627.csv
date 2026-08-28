@@ -1,0 +1,4 @@
+location_id,address_1,address_2,city,state,zip,geocode_level,geocode_reason
+61,100 Nowhere Rd,,Gainesville,FL,0,failed,address: Geocoder could not resolve precise coordinates | zip9: ZIP9 missing | zip5: Zip missing
+62,200 Testing Way,,Tampa,FL,99999,failed,address: Geocoder could not resolve precise coordinates | zip9: ZIP9 missing | zip5: ZIP5 not found in HUD crosswalk
+63,483 Bay St,,Toronto,ON,M5V 3L9,failed,address: Geocoder could not resolve precise coordinates | zip9: ZIP9 missing | zip5: Zip missing

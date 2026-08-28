@@ -1,0 +1,67 @@
+location_id,address_1,address_2,city,state,zip,county,location_source_value,country_concept_id,country_source_value,latitude,longitude,modifier_source_value
+1,1250 W 16th St,,Jacksonville,FL,32209,Duval,,,UNITED STATES OF AMERICA,30.353463,-81.6749,Level 2 | lat/long generated from address
+2,2001 SW 16th St,,Gainesville,FL,32608,Alachua,,,UNITED STATES OF AMERICA,29.634219,-82.343342,Level 2 | lat/long generated from address
+3,7000 University Blvd,,Winter Park,FL,32792,Orange,,,UNITED STATES OF AMERICA,28.597446,-81.294567,Level 2 | lat/long generated from address
+4,1202 Prairie Ln,,Titusville,FL,32780,Brevard,,,UNITED STATES OF AMERICA,28.600563,-80.811204,Level 2 | lat/long generated from address
+5,8441 Helen Ter,,Jacksonville,FL,32210,Duval,,,UNITED STATES OF AMERICA,30.286449,-81.791154,Level 2 | lat/long generated from address
+6,4860 Sand Stone Ln,,West Palm Beach,FL,33417,Palm Beach,,,UNITED STATES OF AMERICA,26.744598,-80.115895,Level 2 | lat/long generated from address
+7,2515 First St,,Fort Myers,FL,33901,Lee,,,UNITED STATES OF AMERICA,26.646601,-81.865972,Level 2 | lat/long generated from address
+8,2060 Continental Ave,,Tallahassee,FL,32304,Leon,,,UNITED STATES OF AMERICA,30.455472,-84.314401,Level 2 | lat/long generated from address
+9,1155 SE 7th Ave,,Dania Beach,FL,33004,Broward,,,UNITED STATES OF AMERICA,26.036492,-80.131021,Level 2 | lat/long generated from address
+10,4400 SW 20th Ave,,Gainesville,FL,32607,Alachua,,,UNITED STATES OF AMERICA,29.636185,-82.389138,Level 2 | lat/long generated from address
+11,1850 SE 18th Ave,,Ocala,FL,34471,Marion,,,UNITED STATES OF AMERICA,29.171205,-82.114012,Level 2 | lat/long generated from address
+12,2165 Van Buren St,,Hollywood,FL,33020,Broward,,,UNITED STATES OF AMERICA,26.010149,-80.150296,Level 2 | lat/long generated from address
+13,434 W Jefferson St,,Tallahassee,FL,32301,Leon,,,UNITED STATES OF AMERICA,30.4397,-84.286513,Level 2 | lat/long generated from address
+14,831 Oakley Seaver Dr,,Clermont,FL,34711,Lake,,,UNITED STATES OF AMERICA,28.553619,-81.724067,Level 2 | lat/long generated from address
+15,1000 Peachtree Park Dr NE,,Atlanta,GA,30309,Fulton,,,UNITED STATES OF AMERICA,33.812466,-84.384066,Level 2 | lat/long generated from address
+16,240 NW 25th St,,Miami,FL,33127,Miami-Dade,,,UNITED STATES OF AMERICA,25.800599,-80.201235,Level 2 | lat/long generated from address
+17,1510 6th Ave,,Columbus,GA,31901,Muscogee,,,UNITED STATES OF AMERICA,32.474402,-84.984637,Level 2 | lat/long generated from address
+18,711 Beach Blvd,,Jacksonville Beach,FL,32250,Duval,,,UNITED STATES OF AMERICA,30.287774,-81.448369,Level 2 | lat/long generated from address
+19,109 W Fortune St,,Tampa,FL,33602,Hillsborough,,,UNITED STATES OF AMERICA,27.952477,-82.463472,Level 2 | lat/long generated from address
+20,541 2nd Ave S,,Naples,FL,34102,Collier,,,UNITED STATES OF AMERICA,26.144649,-81.800344,Level 2 | lat/long generated from address
+21,1400 Briarcliff Rd NE,,Atlanta,GA,30306,DeKalb,,,UNITED STATES OF AMERICA,33.792475,-84.336954,Level 2 | lat/long generated from address
+22,1756 N Bayshore Dr,,Miami,FL,33132,Miami-Dade,,,UNITED STATES OF AMERICA,25.792819,-80.186568,Level 2 | lat/long generated from address
+23,949 Cleveland St,,Clearwater,FL,33756,Pinellas,,,UNITED STATES OF AMERICA,27.965644,-82.783078,Level 2 | lat/long generated from address
+24,4400 Cortina Cir,,Fort Myers,FL,33916,Lee,,,UNITED STATES OF AMERICA,26.600684,-81.844535,Level 2 | lat/long generated from address
+25,953 Collins Ave,,Miami Beach,FL,33139,Miami-Dade,,,UNITED STATES OF AMERICA,25.779974,-80.131772,Level 2 | lat/long generated from address
+26,4020 Montgomery St,,Savannah,GA,31405,Chatham,,,UNITED STATES OF AMERICA,32.043515,-81.109861,Level 2 | lat/long generated from address
+27,1242 N Laura St,,Jacksonville,FL,32206,Duval,,,UNITED STATES OF AMERICA,30.338503,-81.656416,Level 2 | lat/long generated from address
+28,8110 Misty Wood Ave,,Lakewood Ranch,FL,34202,Manatee,,,UNITED STATES OF AMERICA,27.43042,-82.456519,Level 2 | lat/long generated from address
+29,6318 14th St E,,Bradenton,FL,34203,Manatee,,,UNITED STATES OF AMERICA,27.428962,-82.548001,Level 2 | lat/long generated from address
+30,5120 SW 13th Pl,,Gainesville,FL,32607,Alachua,,,UNITED STATES OF AMERICA,29.63989,-82.444072,Level 2 | lat/long generated from address
+31,,,,FL,33414,Palm Beach,,,UNITED STATES OF AMERICA,26.6587,-80.2414,Level 4 | lat/long generated from zip5
+32,3415 SW 39th Blvd,,,FL,32608,Alachua,,,UNITED STATES OF AMERICA,29.617891,-82.37267,Level 2 | lat/long generated from address
+33,1600 SW Archer Rd,,Gainesville,FL,32610,Alachua,,,UNITED STATES OF AMERICA,29.6392,-82.3441,Level 1 | lat/long provided
+34,1329 SW 16th St,,Gainesville,FL,32608,Alachua,,,UNITED STATES OF AMERICA,0.0,0.0,Level 1 | lat/long provided
+35,3900 S Congress Ave,,West Palm Beach,FL,33461,Palm Beach,,,UNITED STATES OF AMERICA,-82.3441,29.6392,Level 1 | lat/long provided
+36,1 Beach Dr SE,,St Petersburg,FL,33701,Pinellas,,,UNITED STATES OF AMERICA,27.771227,-82.63333,Level 2 | lat/long generated from address
+37,600 S Calhoun St,,Tallahassee,FL,32399,Leon,,,UNITED STATES OF AMERICA,30.437318,-84.279652,Level 2 | lat/long generated from address
+38,2 S Biscayne Blvd,,Miami,FL,33131,Miami-Dade,,,UNITED STATES OF AMERICA,25.771113,-80.187258,Level 2 | lat/long generated from address
+39,1250 W 16th,,Street Jacksonville,FL,32209,Duval,,,UNITED STATES OF AMERICA,30.353463,-81.6749,Level 2 | lat/long generated from address
+40,1155 SE 7th Ave,,Dania Beach,FL,33004,Broward,,,UNITED STATES OF AMERICA,26.036492,-80.131021,Level 2 | lat/long generated from address
+41,8441 Helen Ter,,Jacksonville,FL,32210,Duval,,,UNITED STATES OF AMERICA,30.286449,-81.791154,Level 2 | lat/long generated from address
+42,4400 SW 20th Ave,Apt 4b,Gainesville,FL,32607,Alachua,,,UNITED STATES OF AMERICA,29.636185,-82.389138,Level 2 | lat/long generated from address
+43,2060 Continental Ave,Ste 200,Tallahassee,FL,32304,Leon,,,UNITED STATES OF AMERICA,30.455472,-84.314401,Level 2 | lat/long generated from address
+44,1250 1260 W 16th St,,Jacksonville,FL,32209,Duval,,,UNITED STATES OF AMERICA,30.353386,-81.675043,Level 2 | lat/long generated from address
+45,1200 O Brien Rd,,Ocala,FL,34471,Marion,,,UNITED STATES OF AMERICA,29.171205,-82.114012,Level 4 | lat/long generated from zip5
+46,3000 St Augustine Rd,,Jacksonville,FL,32207,Duval,,,UNITED STATES OF AMERICA,30.296622,-81.642669,Level 2 | lat/long generated from address
+47,1234 Ponce De León Blvd,,Coral Gables,FL,33134,Miami-Dade,,,UNITED STATES OF AMERICA,25.760262,-80.259098,Level 2 | lat/long generated from address
+48,PO Box 1234,,Gainesville,FL,32602,Alachua,,,UNITED STATES OF AMERICA,29.6299,-82.3966,Level 4 | lat/long generated from zip5
+49,Main St,1st,Ave Jacksonville,FL,32202,Duval,,,UNITED STATES OF AMERICA,30.332246,-81.656216,Level 2 | lat/long generated from address
+50,12345 26,,Newberry,FL,32669,Alachua,,,UNITED STATES OF AMERICA,29.6609,-82.5852,Level 4 | lat/long generated from zip5
+51,Rr 2 Box 15,,Live Oak,FL,32060,Suwannee,,,UNITED STATES OF AMERICA,30.1759,-83.0304,Level 4 | lat/long generated from zip5
+52,Millhopper Rd,,Gainesville,FL,32653,Alachua,,,UNITED STATES OF AMERICA,29.706158,-82.410881,Level 2 | lat/long generated from address
+53,700 Universe Blvd,,Juno Beach,FL,33408,Palm Beach,,,UNITED STATES OF AMERICA,26.858144,-80.059963,Level 2 | lat/long generated from address
+54,1000 Peachtree Park Dr NE,,Atlanta,GE,30309,Fulton,,,UNITED STATES OF AMERICA,33.812466,-84.384066,Level 2 | lat/long generated from address
+55,2500 N State St,,Jackson,MI,39216,Hinds,,,UNITED STATES OF AMERICA,32.328716,-90.175627,Level 2 | lat/long generated from address
+56,1510 6th Ave,,Columbus,GA,31901,Muscogee,,,UNITED STATES OF AMERICA,32.474402,-84.984637,Level 2 | lat/long generated from address
+57,1329 SW 16th St,,Gainesville,FL,32608,Alachua,,,UNITED STATES OF AMERICA,29.635495,-82.343141,Level 2 | lat/long generated from address
+58,1493 Cambridge St,,Boston,MA,2134,Suffolk,,,UNITED STATES OF AMERICA,42.374275,-71.104356,Level 2 | lat/long generated from address
+59,1493 Cambridge St,,Boston,MA,2134,Suffolk,,,UNITED STATES OF AMERICA,42.374275,-71.104356,Level 2 | lat/long generated from address
+60,5120 SW 13th Pl,,Gainesville,FL,32608,Alachua,,,UNITED STATES OF AMERICA,29.641403,-82.397423,Level 2 | lat/long generated from address
+61,100 Nowhere Rd,,Gainesville,FL,0,Alachua,,,UNITED STATES OF AMERICA,,,failed | geocoding failed
+62,200 Testing Way,,Tampa,FL,99999,Hillsborough,,,UNITED STATES OF AMERICA,,,failed | geocoding failed
+63,483 Bay St,,Toronto,ON,M5V 3L9,,,,CANADA,,,failed | geocoding failed
+64,,,,FL,33414,Palm Beach,,,UNITED STATES OF AMERICA,26.6587,-80.2414,Level 4 | lat/long generated from zip5
+65,Not Stated,,Unknown,FL,32601,Alachua,,,UNITED STATES OF AMERICA,29.665909,-82.339284,Level 4 | lat/long generated from zip5
+66,1500 NW 13th,,St,FL,32601,Alachua,,,UNITED STATES OF AMERICA,29.665909,-82.339284,Level 2 | lat/long generated from address
