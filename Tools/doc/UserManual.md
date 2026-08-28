@@ -33,6 +33,15 @@ This repository provides a **reproducible workflow** to geocode patient location
     - [Method: DeGAUSS Toolkit (Docker-based)](#method-degauss-toolkit-docker-based)
     - [Script Reference](#script-reference)
     - [Environment Variables](#environment-variables)
+  - [Appendix: Edge Case Reference](#appendix-edge-case-reference)
+    - [1. Silently Wrong Results](#1-silently-wrong-results)
+    - [2. Incomplete Addresses That Still Resolve](#2-incomplete-addresses-that-still-resolve)
+    - [3. Coordinates Supplied in Your Input](#3-coordinates-supplied-in-your-input)
+    - [4. Street Text Normalization](#4-street-text-normalization)
+    - [5. ZIP Field](#5-zip-field)
+    - [6. Placeholders and Non-US Addresses](#6-placeholders-and-non-us-addresses)
+    - [7. LOCATION\_HISTORY](#7-location_history)
+    - [8. Rows That Abort the Entire Run](#8-rows-that-abort-the-entire-run)
 ---
 
 ## Overview
@@ -460,3 +469,88 @@ All are optional; defaults are applied when unset.
 > 🔒 **Privacy note on `ENABLE_GEOPY_PARSE`.** This variable is **off by default and should stay off**. When set to `1`, the script sends normalized addresses to **Nominatim, OpenStreetMap's public geocoding web service**, which means address data leaves your environment. This is incompatible with this toolkit's stated guarantee of local-only processing. Do not enable it on patient data.
 >
 > Note that the unrelated `pgeocode.Nominatim` used internally for ZIP centroid lookups is a **local offline dataset** and performs no network calls. The two share a name but are not the same thing.
+
+---
+
+## Appendix: Edge Case Reference
+
+How `Address_to_LOCATION.py` (`1.0.4`) behaves on real-world input.
+
+### 1. Silently Wrong Results
+
+⚠️ Every case below is **reported as a successful geocode**. Nothing downstream flags them.
+
+| Case | Example | What actually happens |
+|------|---------|-----------------------|
+| `0, 0` coordinates | `latitude = 0, longitude = 0` | Accepted as **Level 1**. |
+| Latitude and longitude swapped | `latitude = -82.3441, longitude = 29.6392` | Accepted as **Level 1** |
+| Impossible latitude | `latitude = 95.1234, longitude = -82.6403` | Rejected at first, then recycled into its ZIP's average and re-emitted as **Level 4 with `95.1234` still attached**. |
+| Full state name instead of code | `state = "Georgia"` → `GE`; `"Mississippi"` → `MI` | The first two letters are kept blindly. `GE` is not a state, so the ZIP+4 lookup fails for that row; `MI` is Michigan. **Send two-letter codes.** |
+| Mixed date formats in one column | `2018-03-15` and `03/15/2018` | The format of the **first row** wins; every date not matching it is blanked (logged). Which rows survive depends on row order, so re-sorting the file changes the result. **Use `YYYY-MM-DD` throughout.** |
+| `end_date` before `start_date` | `start_date = 2021-01-01`, `end_date = 2019-01-01` | Accepted silently; order is never checked. Any exposure window built from that row is empty. |
+| Orphan `location_id` | `9999` present in `LOCATION_HISTORY.csv` only | Accepted and written straight to output. Referential integrity against `LOCATION.csv` is not checked. |
+| Spelled-out or misspelled street suffix | `1250 West 16th Streett` | The address parser runs **before** the spelling fixes, so the suffix lands in the wrong field: street → `1250 W 16th`, city → `Street Jacksonville`. `12345 State Highway 26` → street `12345 26`. Coordinates usually still arrive via ZIP, but the cleaned address in the output is wrong. Sending `St` / `Ave` / `Blvd` / `Hwy` avoids this entirely. |
+
+### 2. Incomplete Addresses That Still Resolve
+
+The tool tries the full address first, then falls back to coarser location information. An incomplete address is usually not fatal.
+
+| Case | Example | Outcome |
+|------|---------|---------|
+| ZIP only, no street or city | `state = "FL", zip = "33414"` | Accepted → ZIP centroid, labelled `Level 4 \| lat/long generated from zip5`. |
+| Street present, city missing | `address_1 = "3415 sw 39th blvd", state = "FL", zip = "32608"` | Accepted. Street normalized to `3415 SW 39th Blvd`. |
+| Street with no house number | `"Millhopper Rd", Gainesville, 32653` | Imprecise match, so the row drops to ZIP level rather than failing. |
+| PO Box | `"PO Box 1234"` | Cannot match a building → falls back to ZIP level. |
+| Intersection | `"Main St & 1st Ave"` | Splits badly (`Ave Jacksonville` ends up in city). ZIP-level result. |
+
+### 3. Coordinates Supplied in Your Input
+
+| Case | Example | Outcome |
+|------|---------|---------|
+| Non-numeric values | `latitude = "N/A", longitude = "unknown"` | Both ignored; row falls through to normal address geocoding. Correct behaviour. |
+| Only one of the pair | `latitude = 25.7617, longitude = ""` | Ignored, falls through. |
+
+### 4. Street Text Normalization
+
+Works as intended. ALL CAPS, all lowercase, spelled-out suffixes, and common typos are corrected.
+
+| Input | Becomes | Note |
+|-------|---------|------|
+| `8441 HELEN TERRACE` | `8441 Helen Ter` | Case and suffix normalized |
+| `2060 Continental Ave, Sutie 200` | `… Ste 200` | Common misspellings corrected |
+| `1200 O'Brien Rd` | `1200 O Brien Rd` | Apostrophes and periods removed; fine for geocoding, but affects later exact-text matching |
+| `1234 Ponce de León Blvd` | `1234 Ponce De León Blvd` | Accented characters preserved |
+
+### 5. ZIP Field
+
+| Case | Example | Outcome |
+|------|---------|---------|
+| ZIP+4 (best ZIP-level result) | `zip = "32608-1234"` | Split into ZIP5 `32608` and ZIP9 `326081234`. If present in the reference data the row resolves at **Level 3**, more precise than a plain ZIP. Hyphen optional. |
+| ⚠️ Leading zero lost in Excel | `zip = "2134"` (should be `02134`, Boston) | At least five digits are required and **no padding is applied**, so the row **fails completely**. The single most common ZIP problem. **Export ZIP as text, not as a number**. |
+| Exported as a number with a decimal | `zip = "32608.0"` | Recovered correctly to `32608`, though a stray `0` ends up in `address_2`. |
+| Well-formed but nonexistent | `zip = "00000"` or `"99999"` | Passes the five-digit format check but is absent from the reference data → failure report reason `ZIP5 not found in HUD crosswalk`. |
+
+### 6. Placeholders and Non-US Addresses
+
+| Case | Example | Outcome |
+|------|---------|---------|
+| Placeholder words instead of values | `address_1 = "Not Stated"`, `city = "UNKNOWN"`, `city = "N/A"` | `Not Stated`, `Unknown`, `N/A`, `None`, `Null`, `Missing` and similar are recognized as placeholders when explaining a failure. The row **can still receive a ZIP-level position**, so a placeholder address does not necessarily mean a failed row. A genuinely blank field is cleaner than writing `Unknown` into it. |
+| Address outside the United States | `"483 Bay St, Toronto, ON, M5V 3L9"` | The postal code contains only three digits, so it is discarded, and the geocoder covers the US only. Row fails. Non-US addresses are out of scope today. |
+
+### 7. LOCATION_HISTORY
+
+| Case | Example | Outcome |
+|------|---------|---------|
+| One person, several addresses over time | `entity_id 5` at location `5` (`2015-01-01` → `2018-01-01`), then location `14` (`2018-01-01` → blank) | Works as intended; this is the table's primary purpose. Leave `end_date` blank for the current address. |
+| Impossible or missing date | `start_date = "2021-13-45"` or `""` | Both end up blank in the output; the log warns and gives the row numbers. |
+| Blank or junk concept ids | `relationship_type_concept_id = ""` or `"abc"`; `domain_id = ""` | Filled with the defaults `32848` and `1147314`, with no warning. Safe to leave blank if you do not have them. |
+
+### 8. Rows That Abort the Entire Run
+
+Two checks run **before** any geocoding. They abort the whole job rather than skipping the offending row, so one bad row means **no output at all**.
+
+| Case | Example | Outcome |
+|------|---------|---------|
+| Blank `location_id` | `location_id = ""` (address and ZIP fine) | Run stops: `ALERT: Input must include non-blank location_id for every row. Row numbers: 2`. IDs need not be numeric. |
+| No address **and** no ZIP on the same row | `address_1 = ""` and `zip = ""` | Run stops: `ALERT: Each input row must include either address or zip for LOCATION output generation. Row numbers: 2`. Either field alone is enough. |
+| No `location_id` **column** at all | a raw extract whose header is `street,city,state,zip,year,entity_id` | Every row reads as blank `location_id`, so the first check stops the run and nothing is produced. Add the column before running. The demo inputs [`multi_column_address_data.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/geocoding/input/multi_column_address_data.csv) and [`single_column_address_data.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/geocoding/input/single_column_address_data.csv) each carry `location_id` as their first column for exactly this reason. |
