@@ -8,7 +8,6 @@ This repository provides a **reproducible workflow** to geocode patient location
 ---
 ## 📑 Table of Contents
 - [Exposome Geocoder: Input Preparation and Usage Guide](#exposome-geocoder--input-preparation-and-usage-guide)
-  - [📑 Table of Contents](#-table-of-contents)
   - [Overview](#overview)
   - [Input Options](#input-options)
     - [Option 1: Address](#option-1-address)
