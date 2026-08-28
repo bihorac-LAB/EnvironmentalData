@@ -302,7 +302,7 @@ docker build -t chorus-postgis-exposure-local .
 
 docker run --rm --name postgis-chorus ^
     --env POSTGRES_PASSWORD="dummy" ^
-    --env VARIABLES^
+    --env VARIABLES ^
     --env DATA_SOURCES ^
     -v ./test:/source ^
     -d chorus-postgis-exposure-local:latest
