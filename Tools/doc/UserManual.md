@@ -60,7 +60,7 @@ Your data  →  Step 2: Address_to_LOCATION.py  →  LOCATION.csv          →  
 You need to prepare **only ONE** of the following data elements per encounter.  
 
 ### Option 1: Address
-Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/address_files/input)
+Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/geocoding/input)
 
 - **Format A: Multi-Column Address**
 
@@ -92,8 +92,8 @@ If your source data already lives in an OMOP CDM database, extract the following
 | location_history   | location_id, relationship_type_concept_id, domain_id, entity_id, start_date, end_date |
 
 Sample input files: 
-- [`LOCATION.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/address_files/input/LOCATION.csv)  
-- [`LOCATION_HISTORY.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/address_files/input/LOCATION_HISTORY.csv)
+- [`LOCATION.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/geocoding/input/LOCATION.csv)  
+- [`LOCATION_HISTORY.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/geocoding/input/LOCATION_HISTORY.csv)
 
 > **Important**: Do not date-shift your `LOCATION` / `LOCATION_HISTORY` files before linkage. Date shifting, if used, should occur after linkage in [Step 6](#step-6-site-level-date-shifting-optional).
 
@@ -172,7 +172,7 @@ output/
 └── geocode_failures_<timestamp>.csv    # rows that could not be geocoded
 ```
 
-Sample outputs: [demo/address_files/output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/address_files/output)
+Sample outputs: [demo/geocoding/output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/geocoding/output)
 
 `LOCATION.csv` carries the 12 standard OMOP CDM `LOCATION` columns plus a 13th, `modifier_source_value`, recording which fallback tier produced each coordinate. **This extra column is expected by the linkage container**, whose `location_raw` table declares it explicitly. Do not strip it.
 
@@ -236,7 +236,7 @@ To confirm what a given ID is before requesting it, look the number up in the re
 #### Expected Outputs
 - `EXTERNAL_EXPOSURE.csv` containing linked indices (ADI, SVI, EJI, AHRQ metrics).
 
-Sample file [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/PostGIS-output/EXTERNAL_EXPOSURE.csv)
+Sample file [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/GIS-linkage/EXTERNAL_EXPOSURE.csv)
 
 ---
 
@@ -322,7 +322,7 @@ docker stop postgis-chorus
 
 ### Step 5: Validate & Inspect Outputs
 
-`EXTERNAL_EXPOSURE.csv` is in **long format** (one row per location, person, variable, and year), not one row per patient. Sample output: [demo/PostGIS-output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/PostGIS-output).
+`EXTERNAL_EXPOSURE.csv` is in **long format** (one row per location, person, variable, and year), not one row per patient. Sample output: [demo/GIS-linkage](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/GIS-linkage).
 
 Open `EXTERNAL_EXPOSURE.csv` and confirm:
 
@@ -375,7 +375,7 @@ See [Date Shifting SOP for More Details](https://github.com/chorus-ai/Chorus_SOP
 - Sample files: [PostGIS Exposure CSVs](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure/csv)
   - **Site-specific:** `LOCATION`, `LOCATION_HISTORY`
   - **Centrally managed:** `DATA_SRC_SIMPLE`, `VRBL_SRC_SIMPLE`
-- Sample linkage output: [demo/PostGIS-output](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/PostGIS-output)
+- Sample linkage output: [demo/GIS-linkage](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/GIS-linkage)
 
 ---
 
