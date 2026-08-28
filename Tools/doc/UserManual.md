@@ -82,36 +82,16 @@ Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/
 
 ---
 
-### Option 2: Coordinates
-
-Sample input files [here](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo/latlong_files/input)
-
-| location_id | latitude   | longitude | entity_id | year |
-|-------------|------------|-----------|-----------|------|
-| 1           | 30.353463  | -81.6749  | 1         | 2015 |
-| 2           | 29.634219  | -82.3433  | 2         | 2015 |
-
-> ⚠️ **Required for every row:** a non-blank `location_id` (these are **not** auto-generated, so supply your own; they should be site specific). The script exits with an error listing the offending rows if any `location_id` is blank.
-
----
-
-### Option 3: OMOP CDM
+### Option 2: OMOP CDM
 
 If your source data already lives in an OMOP CDM database, extract the following tables first, then run [Step 2](#step-2-generate-location-tables) on the exported CSVs.
 
 | Table              | Required Columns |
 |--------------------|------------------------------------------------------|
-| person             | person_id                                            |
-| visit_occurrence   | visit_occurrence_id, visit_start_date, visit_end_date, person_id |
-| location           | location_id, address_1, address_2, city, state, zip, location_source_value, country_concept_id, country_source_value, latitude, longitude |
+| location           | location_id, address_1, address_2, city, state, zip, county, location_source_value, country_concept_id, country_source_value, latitude, longitude |
 | location_history   | location_id, relationship_type_concept_id, domain_id, entity_id, start_date, end_date |
 
----
-
-#### Optional Supporting Files
-
-Including the following optional files will help streamline the **end-to-end workflow** between geocoding and exposome linkage:
-
+Sample input files: 
 - [`LOCATION.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/address_files/input/LOCATION.csv)  
 - [`LOCATION_HISTORY.csv`](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/address_files/input/LOCATION_HISTORY.csv)
 
@@ -119,42 +99,19 @@ Including the following optional files will help streamline the **end-to-end wor
 
 If these files are provided during **geocoding**, the output will automatically include the updated latitude and longitude information required for the linkage container. If they are **not** provided, `Address_to_LOCATION.py` builds both files for you from your input CSV, so no manual step is needed.
 
-##### LOCATION.csv (Follows CDM format)
-
-Sample file [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/PostGIS-output/LOCATION.csv)
-
-| location_id | address_1 | address_2 | city | state | zip | county | location_source_value | country_concept_id | country_source_value | latitude | longitude |
-|-------------|-----------|-----------|------|-------|-----|--------|----------------------|-------------------|---------------------|----------|-----------|
-| 1           | 1248 N Blackstone Ave | | FRESNO | CA | 93703 | | UNITED STATES OF AMERICA | | UNITED STATES OF AMERICA | 36.75891146 | -119.7902719 |
-
-##### LOCATION_HISTORY.csv (Follows CDM format)
-
-Sample file [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/demo/PostGIS-output/LOCATION_HISTORY.csv)
-
-| location_id | relationship_type_concept_id | domain_id | entity_id | start_date | end_date |
-|-------------|------------------------------|-----------|-----------|------------|----------|
-| 1           | 32848                        | 1147314   | 3763      | 2019-01-01 | 2019-12-31 |
-
 > **On dates.** `start_date` is taken from `start_date`, `visit_start_date`, or a 4-digit `year` (as `YYYY-01-01`), in that order. `end_date` is taken only from `end_date` or `visit_end_date`; it is **not** inferred from `year`. When a value cannot be derived it is left **blank** rather than filled with a placeholder, and the run logs a warning naming the affected rows.
-
 ---
 
 ## Usage Guide
 
 ### Step 1: Prepare Input Data
 Prepare **only ONE** of the data elements as indicated under the [Input Options](#input-options) per encounter.  
-For **Option 1 (Address)** or **Option 2 (Coordinates)**, your data must be in a **CSV file** format. 
+For **Option 1 (Address)** or **Option 2 (OMOP)**, your data must be in a **CSV file** format. 
 
 #### Folder Structure
 - Place the CSV file(s) in a dedicated folder
-  - 📂 `input_address/`  *(for address-based data)*  
-  - 📂 `input_coordinates/`  *(for coordinate-based data)* 
-- Optionally, include:
-  -    `LOCATION.csv`
-  -   `LOCATION_HISTORY.csv`
-    
+  - 📂 `input_address/` 
 > ⚠️ Only `.csv` files are supported. Convert `.xlsx` or other formats before running the tool.
-
 ---
 
 ### Step 2: Generate LOCATION Tables
@@ -177,14 +134,12 @@ docker run -it --rm \
 ```
 
 #### For Windows
-- Open Command Prompt or PowerShell
-- Run command `wsl`
-- Execute the same command as above inside your WSL terminal.
+- Open Command Prompt
 
 Example, if your file is inside 📂`input_address/`:
 
 ```bash
-docker run -it --rm   -v "$(pwd)":/workspace   -v /var/run/docker.sock:/var/run/docker.sock   -e HOST_PWD="$(pwd)"   -w /workspace   prismaplab/exposome-geocoder:1.0.4   /app/code/Address_to_LOCATION.py -i input_address
+docker run -it --rm   -v "%cd%":/workspace   -v /var/run/docker.sock:/var/run/docker.sock   -e HOST_PWD="%cd%"   -w /workspace   prismaplab/exposome-geocoder:1.0.4   /app/code/Address_to_LOCATION.py -i input_address
 ```
 
 > ℹ️ The script launches the DeGAUSS geocoder in a nested Docker container, which is why the command mounts the Docker socket and passes `HOST_PWD`. All geocoding runs **locally**; no address data leaves your machine.
@@ -209,7 +164,6 @@ The tier used for each row is recorded in the `modifier_source_value` column of 
 ### Step 3: Output Structure
 
 Outputs are written to an `output/` folder created alongside your input folder.
-
 ```
 output/
 ├── LOCATION.csv                        # OMOP CDM LOCATION + modifier_source_value
