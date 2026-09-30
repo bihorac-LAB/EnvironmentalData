@@ -1,4 +1,5 @@
 venv
+.env
 tmp/*
 # **/output/*
 */Input/*
@@ -6,9 +7,12 @@ tmp/*
 Tools/SDOH/Address-to-fips/*
 
 input_csvs/
+Benchmark/results/
+Benchmark/data/
 
 /reference_codes/
 /Tools/demo/public_nad_test
 /.github
 *.md
 *.docx
+__pycache__

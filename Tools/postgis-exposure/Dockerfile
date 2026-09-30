@@ -18,4 +18,5 @@ COPY sql/init.sql /docker-entrypoint-initdb.d/init.sql
 COPY sql/spatial_join_1pt.sql /sql
 COPY sql/spatial_join_2pt.sql /sql
 COPY csv/* /csv
-COPY produce_external_exposure.sh /app
+COPY produce_external_exposure.sh /app/produce_external_exposure.sh
+RUN sed -i 's/\r$//' /app/produce_external_exposure.sh && chmod +x /app/produce_external_exposure.sh
