@@ -130,7 +130,8 @@ def feature_to_encounter(feature: dict[str, Any], row_number: int, coordinate_fr
     benchmark_year = 2010 + ((row_number - 1) % 15)
     coordinate_selector = ((row_number * 6_181) % 10_000) / 10_000
     retain_coordinate = coordinate_selector < coordinate_fraction
-    location_id = f"OA-VA-{row_number:09d}"
+    location_id = row_number
+    location_source_value = f"OA-VA-{row_number:09d}"
     return {
         "entity_id": row_number,
         "location_id": location_id,
@@ -144,7 +145,7 @@ def feature_to_encounter(feature: dict[str, Any], row_number: int, coordinate_fr
         "year": benchmark_year,
         "start_date": f"{benchmark_year}-01-01",
         "end_date": f"{benchmark_year}-12-31",
-        "location_source_value": location_id,
+        "location_source_value": location_source_value,
         "country_source_value": "UNITED STATES OF AMERICA",
     }
 
@@ -169,7 +170,8 @@ def normalized_feature_to_encounter(
     benchmark_year = 2010 + ((row_number - 1) % 15)
     coordinate_selector = ((row_number * 6_181) % 10_000) / 10_000
     retain_coordinate = coordinate_selector < coordinate_fraction
-    location_id = f"OA-US-{row_number:09d}"
+    location_id = row_number
+    location_source_value = f"OA-US-{row_number:09d}"
     return {
         "entity_id": row_number,
         "location_id": location_id,
@@ -183,7 +185,7 @@ def normalized_feature_to_encounter(
         "year": benchmark_year,
         "start_date": f"{benchmark_year}-01-01",
         "end_date": f"{benchmark_year}-12-31",
-        "location_source_value": location_id,
+        "location_source_value": location_source_value,
         "country_source_value": "UNITED STATES OF AMERICA",
     }
 
