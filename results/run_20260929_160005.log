@@ -1,0 +1,68 @@
+[16:00:05] INFO  Log file: results\run_20260929_160005.log
+[16:00:05] INFO  Input file : nad_encounters_sample.csv
+[16:00:05] INFO  Workers    : 5
+[16:00:05] INFO  Chunk size : 9000
+[16:00:05] INFO  Use cache  : True
+[16:00:05] INFO  
+Step 1: Loading input ...
+[16:00:05] INFO    Rows: 2000 | Columns: ['entity_id', 'location_id', 'address_1', 'address_2', 'city', 'state', 'zip', 'latitude', 'longitude', 'year', 'start_date', 'end_date', 'location_source_value', 'country_source_value']
+[16:00:05] INFO  
+Step 2: Census batch geocoding ...
+[16:00:05] INFO    Census batch input written: census_output\nad_census_batch_input.csv  (2000 rows)
+[16:00:05] INFO    Census API: 2000 rows split into 1 chunk(s) of <=9000
+[16:00:05] INFO    Chunk 1/1: using cached Census API response: census_output\census_raw_chunk_1.csv
+[16:00:05] INFO    Census results: 2000 rows | statuses: {'Match': 1711, 'No_Match': 273, 'Tie': 16}
+[16:00:05] INFO  
+Step 3: Exposome Docker container ...
+[16:00:05] INFO    Exposome input written: input_address\nad_exposome_input.csv  (2000 rows)
+[16:00:05] INFO    Found LOCATION.csv: output\LOCATION.csv
+[16:00:05] INFO    Pulling image: prismaplab/exposome-geocoder:1.0.4 ...
+[16:00:07] INFO    Image ready.
+[16:00:07] INFO    Running: docker run --rm -v D:\PRISMAp\prototyping\geocoding:/workspace -v //var/run/docker.sock:/var/run/docker.sock -e HOST_PWD=D:\PRISMAp\prototyping\geocoding -w /workspace prismaplab/exposome-geocoder:1.0.4 /app/code/Address_to_LOCATION.py -i input_address
+[16:17:13] WARNING    Container stderr:
+2026-09-29T20:00:15.223558+0000 INFO Log file configured: /workspace/output/log/address_to_location_20260929_200015.log
+2026-09-29T20:00:15.267347+0000 INFO FIPS generation is disabled for this iteration. Producing LOCATION-based outputs only.
+/app/code/Address_to_LOCATION.py:1340: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  frame[numeric_col] = pd.to_numeric(frame[numeric_col], errors="ignore")
+/usr/local/lib/python3.10/site-packages/openpyxl/styles/stylesheet.py:237: UserWarning: Workbook contains no default style, apply openpyxl's default
+  warn("Workbook contains no default style, apply openpyxl's default")
+/usr/local/lib/python3.10/site-packages/openpyxl/styles/stylesheet.py:237: UserWarning: Workbook contains no default style, apply openpyxl's default
+  warn("Workbook contains no default style, apply openpyxl's default")
+2026-09-29T20:03:34.638834+0000 INFO Running geocoder for address_full_address_20260929_200334 with 1982 records
+2026-09-29T20:08:35.767273+0000 INFO Running geocoder for zip5_city_state_zip5_20260929_200835 with 213 records
+2026-09-29T20:12:45.332278+0000 INFO Running geocoder for zip5_zip5_only_20260929_201245 with 178 records
+2026-09-29T20:17:10.653820+0000 INFO Auto-populated LOCATION_HISTORY.start_date from year as YYYY-01-01 for 2000 rows. end_date is left blank unless explicitly provided.
+2026-09-29T20:17:10.808107+0000 INFO LOCATION_HISTORY output generated: /workspace/output/LOCATION_HISTORY.csv
+2026-09-29T20:17:10.858226+0000 INFO LOCATION output generated: /workspace/output/LOCATION.csv
+2026-09-29T20:17:10.909744+0000 INFO Geocoding success rate: 100.00% (2000/2000). Summary generated: /workspace/output/geocoding_summary_20260929_201710.csv
+2026-09-29T20:17:10.954718+0000 INFO Deleted preprocessed analysis folder: /workspace/output/preprocessed_analysis/20260929_200015
+
+[16:17:13] INFO    Exposome container finished successfully.
+[16:17:13] INFO    Found LOCATION.csv: output\LOCATION.csv
+[16:17:13] INFO  
+Step 4: Deriving census tracts from Exposome coordinates ...
+[16:17:13] INFO    Exposome LOCATION.csv: 2000 rows | cols: ['location_id', 'address_1', 'address_2', 'city', 'state', 'zip', 'county', 'location_source_value', 'country_concept_id', 'country_source_value', 'latitude', 'longitude', 'modifier_source_value']
+[16:17:13] INFO    Loaded 599 cached coordinate tract lookups.
+[16:17:13] INFO    Coordinate lookups needed: 1928 (cached: 72) | no-coord rows: 0
+[16:23:46] INFO  
+Step 5: Comparing and generating report ...
+[16:23:47] INFO  
+============================================================
+[16:23:47] INFO  RESULTS
+[16:23:47] INFO  ============================================================
+[16:23:47] INFO    Total addresses:              2000
+[16:23:47] INFO    Both returned a tract:        1711
+[16:23:47] INFO    Matching census tract:        1579
+[16:23:47] INFO    Non-matching:                 132
+[16:23:47] INFO    Census API no-match:          289
+[16:23:47] INFO    Exposome no-coord:            0
+[16:23:47] INFO  
+  MATCH RATE: 1579/1711 = 92.29%
+
+[16:23:47] INFO  ============================================================
+[16:23:47] INFO  
+  Outputs:
+[16:23:47] INFO      results\comparison_results.csv
+[16:23:47] INFO      results\summary.json
+[16:23:47] INFO      results\report.html  <-- open this in your browser
+

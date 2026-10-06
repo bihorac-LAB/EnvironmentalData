@@ -1,0 +1,16 @@
+2026-09-29T18:35:45.584465+0000 INFO Log file configured: /workspace/output/log/address_to_location_20260929_183545.log
+2026-09-29T18:35:45.589791+0000 INFO FIPS generation is disabled for this iteration. Producing LOCATION-based outputs only.
+2026-09-29T18:39:09.350501+0000 INFO Running geocoder for address_full_address_20260929_183909 with 1982 records
+2026-09-29T18:39:10.106298+0000 ERROR Geocoder failed at level address_full_address_20260929_183909: failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory
+
+2026-09-29T18:39:10.351540+0000 INFO Running geocoder for zip5_city_state_zip5_20260929_183910 with 720 records
+2026-09-29T18:39:10.430214+0000 ERROR Geocoder failed at level zip5_city_state_zip5_20260929_183910: failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory
+
+2026-09-29T18:39:10.531331+0000 INFO Running geocoder for zip5_zip5_only_20260929_183910 with 602 records
+2026-09-29T18:39:10.564672+0000 ERROR Geocoder failed at level zip5_zip5_only_20260929_183910: failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory
+
+2026-09-29T18:39:20.859859+0000 INFO Auto-populated LOCATION_HISTORY.start_date from year as YYYY-01-01 for 2000 rows. end_date is left blank unless explicitly provided.
+2026-09-29T18:39:20.971582+0000 INFO LOCATION_HISTORY output generated: /workspace/output/LOCATION_HISTORY.csv
+2026-09-29T18:39:20.999111+0000 INFO LOCATION output generated: /workspace/output/LOCATION.csv
+2026-09-29T18:39:21.024089+0000 INFO Geocoding success rate: 100.00% (2000/2000). Summary generated: /workspace/output/geocoding_summary_20260929_183921.csv
+2026-09-29T18:39:21.040862+0000 INFO Deleted preprocessed analysis folder: /workspace/output/preprocessed_analysis/20260929_183545

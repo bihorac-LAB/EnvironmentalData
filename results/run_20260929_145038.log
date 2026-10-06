@@ -1,0 +1,21 @@
+[14:50:38] INFO  Log file: results\run_20260929_145038.log
+[14:50:38] INFO  Input file : nad_encounters_sample.csv
+[14:50:38] INFO  Workers    : 5
+[14:50:38] INFO  Chunk size : 9000
+[14:50:38] INFO  Use cache  : True
+[14:50:38] INFO  
+Step 1: Loading input ...
+[14:50:38] INFO    Rows: 2000 | Columns: ['entity_id', 'location_id', 'address_1', 'address_2', 'city', 'state', 'zip', 'latitude', 'longitude', 'year', 'start_date', 'end_date', 'location_source_value', 'country_source_value']
+[14:50:38] INFO  
+Step 2: Census batch geocoding ...
+[14:50:38] INFO    Census batch input written: census_output\nad_census_batch_input.csv  (2000 rows)
+[14:50:38] INFO    Census API: 2000 rows split into 1 chunk(s) of <=9000
+[14:50:38] INFO    Chunk 1/1: using cached Census API response: census_output\census_raw_chunk_1.csv
+[14:50:38] INFO    Census results: 2000 rows | statuses: {'Match': 1711, 'No_Match': 273, 'Tie': 16}
+[14:50:38] INFO  
+Step 3: Exposome Docker container ...
+[14:50:38] INFO    Exposome input written: input_address\nad_exposome_input.csv  (2000 rows)
+[14:50:38] INFO    Found LOCATION.csv: output\LOCATION.csv
+[14:50:38] INFO    Pulling image: prismaplab/exposome-geocoder:1.0.4 ...
+[14:50:39] INFO    Image ready.
+[14:50:39] INFO    Running: docker run --rm -v D:\PRISMAp\prototyping\geocoding:/workspace -v //var/run/docker.sock:/var/run/docker.sock -e HOST_PWD=D:\PRISMAp\prototyping\geocoding -w /workspace prismaplab/exposome-geocoder:1.0.4 /app/code/Address_to_LOCATION.py -i input_address

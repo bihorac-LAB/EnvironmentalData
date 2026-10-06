@@ -1,0 +1,10 @@
+{
+  "run_timestamp": "2026-09-29T16:23:47.623640",
+  "total_addresses": 2000,
+  "both_returned_tract": 1711,
+  "matching_tract": 1579,
+  "non_matching_tract": 132,
+  "census_no_match": 289,
+  "exposome_no_coord": 0,
+  "match_rate_pct": 92.29
+}

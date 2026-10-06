@@ -1,0 +1,4 @@
+2026-09-29T18:31:38.720195+0000 INFO Log file configured: /workspace/output/log/address_to_location_20260929_183138.log
+2026-09-29T18:31:38.726687+0000 INFO FIPS generation is disabled for this iteration. Producing LOCATION-based outputs only.
+2026-09-29T18:31:38.994924+0000 ERROR ALERT: Each input row must include either address or zip for LOCATION output generation. Row numbers: 4021, 4022, 4023, 4024, 4025, 4026, 4027, 4028, 4029, 4030...
+2026-09-29T18:31:39.002326+0000 INFO Deleted preprocessed analysis folder: /workspace/output/preprocessed_analysis/20260929_183138
