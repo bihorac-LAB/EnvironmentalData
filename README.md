@@ -44,6 +44,18 @@ To protect patient privacy, geocoding should be executed **locally**. Our toolki
 
 Detailed instructions are available [here](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/doc/UserManual.md).
 
+### Container images
+
+For exact reproducibility, use the images by digest. Docker accepts `name:tag@sha256:<digest>`, and the digest takes precedence over the tag.
+
+| Step | Image | Digest |
+|---|---|---|
+| Geocoding | `prismaplab/exposome-geocoder:1.0.4` | `sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825` |
+| Address matching (started by the geocoder) | `ghcr.io/degauss-org/geocoder:3.3.0` | `sha256:39bbcb4a2c8f832dbf3d957285bbe23081095a839ab162360044a7ddd539dbf4` |
+| Linkage | `ghcr.io/chorus-ai/chorus-postgis-exposure:main` | `sha256:06768ff5163ce6c98031f98c7c368bf88a67795636e89236f966c68ccc1661ca` |
+
+The linkage image is built by CHoRUS from [`postgis-exposure`](https://github.com/chorus-ai/chorus-container-apps/tree/894d540a72ef0913f5d83fb1543440280e5164e3/postgis-exposure) at revision `894d540a`, the same code as [`Tools/postgis-exposure`](Tools/postgis-exposure). Its `main` tag is rebuilt whenever that folder changes, so pin the digest rather than the tag.
+
 ### Demo Videos
 - [FIPS Generation](https://www.loom.com/share/603607c1365342cb9fb2303566f529cc?sid=81cab3db-8189-4ad4-b1fd-baca7a73bf25)  
 - [Environmental Linkage to Other Datasets](https://www.loom.com/share/bc4097b0d3db4f8f9132a06a49c17e71?sid=ad9671c1-6535-4bc9-b893-7e917efbcf75)
@@ -95,4 +107,5 @@ Or you can submit an issue directly in this repository, and we will respond prom
 
 ## License
 
-This repository is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This repository is licensed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
+The linkage code in [`Tools/postgis-exposure`](Tools/postgis-exposure) comes from the CHoRUS project and keeps its own license, [`Tools/postgis-exposure/LICENSE`](Tools/postgis-exposure/LICENSE).

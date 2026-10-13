@@ -50,7 +50,7 @@ This workflow uses **two separate Docker containers** to take patient addresses 
    Converts addresses or coordinates into OMOP `LOCATION` / `LOCATION_HISTORY` tables with latitude and longitude.
 
 2. **Exposome Linkage Container**, built locally from [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) in this repository  
-   Spatially joins those tables with environmental and social determinant datasets (ADI, SVI, EJI, AHRQ) to produce `EXTERNAL_EXPOSURE.csv`. Build this image from the cloned repository for now; the published `ghcr.io/chorus-ai/chorus-postgis-exposure:main` tag has not yet been rebuilt against the current code, though it will be shortly.
+   Spatially joins those tables with environmental and social determinant datasets (ADI, SVI, EJI, AHRQ) to produce `EXTERNAL_EXPOSURE.csv`. You can build this image from the cloned repository or pull the image CHoRUS publishes from the same code, `ghcr.io/chorus-ai/chorus-postgis-exposure:main@sha256:06768ff5163ce6c98031f98c7c368bf88a67795636e89236f966c68ccc1661ca` (see the note in [Step 4](#step-4-gis-linkage-with-postgis-exposure-tool)).
 
 The path is the same for every site:
 
@@ -123,7 +123,7 @@ For **Option 1 (Address)** or **Option 2 (OMOP)**, your data must be in a **CSV 
 
 ### Step 2: Generate LOCATION Tables
 
-**Container:** `prismaplab/exposome-geocoder:1.0.4`  
+**Container:** `prismaplab/exposome-geocoder:1.0.4` (digest `sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825`)  
 Ensure **Docker Desktop** is running.
 
 This step produces the `LOCATION.csv` and `LOCATION_HISTORY.csv` that the linkage container consumes in [Step 4](#step-4-gis-linkage-with-postgis-exposure-tool).
@@ -136,7 +136,7 @@ docker run -it --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e HOST_PWD="$(pwd)" \
   -w /workspace \
-  prismaplab/exposome-geocoder:1.0.4 \
+  prismaplab/exposome-geocoder:1.0.4@sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825 \
   /app/code/Address_to_LOCATION.py -i <input_folder_path>
 ```
 
@@ -146,7 +146,7 @@ docker run -it --rm \
 Example, if your file is inside 📂`input_address/`:
 
 ```bash
-docker run -it --rm   -v "%cd%":/workspace   -v /var/run/docker.sock:/var/run/docker.sock   -e HOST_PWD="%cd%"   -w /workspace   prismaplab/exposome-geocoder:1.0.4   /app/code/Address_to_LOCATION.py -i input_address
+docker run -it --rm   -v "%cd%":/workspace   -v /var/run/docker.sock:/var/run/docker.sock   -e HOST_PWD="%cd%"   -w /workspace   prismaplab/exposome-geocoder:1.0.4@sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825   /app/code/Address_to_LOCATION.py -i input_address
 ```
 
 > ℹ️ The script launches the DeGAUSS geocoder in a nested Docker container, which is why the command mounts the Docker socket and passes `HOST_PWD`. All geocoding runs **locally**; no address data leaves your machine.
@@ -278,7 +278,7 @@ export DATA_SOURCES="7700,9910,9914,9916,9918,9920,9922,8822,8824,10515,10520,10
 SET "VARIABLES=96,98,100,102,110,112,116,118,120,122,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,156,157,159,197,199,201,203,211,213,217,254,256,258,260,268,270,274,276,278,280,284,285,286,287,288,289,290,291,292,293,294,295,296,297,298,314,315,317,319,334,360,362,364,366,374,378,380,382,384,386,391,392,393,394,395,396,397,398,399,400,401,402,403,404,405,422,423,470,496,498,500,502,510,514,516,518,520,522,527,528,529,530,531,532,533,534,535,536,537,538,539,540,541,558,559,592,593,594,595,601,603,611,612,613,614,615,616,617,618,622,623,632,633,674,675,676,677,678,681,685,687,689,691,692,693,694,695,696,717,718,719,720,721,722,723,724,729,730,739,740,831,832,833,834,835,836,1795,1796,1797,1798,1799,1800,1801,1802,1803,1804,1805,1806,1807,1808,1809,1810,1811,1812,1813,1814,1815,1816,1817,1818,1819,1820,1821,1822,1823,1824,1825,1826,1827,1828,1829,1830,1831,1832,1833,1834,1835,1836,1837,1838,1839,1840,1841,1842,1843,1844,1845,1846,1847,1848,1849,1850,1851,1852,1853,1854,2322,2323,2324,2325,2326,2327,2328,2329,2330,2331,2332,2333,2334,2335,2336,2421,2422,2423,2424,2425,2426,2427,2428,2429,2430,2431,2432,2433,2434,2435,2436,2437,2438,2439,2440,2441,2442,2443,2444,2445,2446,2447,2448,2449,2583,2584,2585,2586,2587,2588,2589,2590,2591,2592,2593,2594,2595,2596,2597,3214,3215,3216,3217,3218,3219,3220,3221,3222,3223,3224,3225,3226,3227,3228,3229,3230,3231,3232,3233,3234,3235,3831,3832,3833,3834,3835,3836,3837,3838,3839,3840,3841,3842,3843,3844,3845,3846,3847,3848,3849,3850,3851,3852,3853,3854,3855,3856,3857,3858,3859,4179,4180,4181,4182,4183,4184,4185,4186,4187,4188,4189,4190,4191,4192,4221,4222,4223,4224,4225,4226,4227,4228,4229,4230,4231,4232,4233,4234,4235,4236,4237,4238,4239,4240,4241,4242,4243,4244,4245,4246,4247,4248,4249,4315,4316,4317,4318,4319,4320,4321,4322,4323,4324,4325,4326,4327,4328,4329,4352,4353,4354,4355,4356,4357,4358,4359,4360,4361,4362,4363,4364,4365,4366,4367,4368,4369,4370,4371,4372,4373,4374,4375,4376,4377,4378,4379,4380,4381,4382,4383,4384,4385,4386,4387,4388,4957,4958,4959,4960,4961,4962,4963,4964,4965,4966,4967,4968,4969,4970,4971,5032,5033,5034,5035,5036,5037,5038,5039,5040,5041,5042,5043,5044,5045,5046,5047,5048,5049,5050,5051,5052,5053,5054,5055,5056,5057,5058,5059,5060,5061,5062,5063,5064,5065,5066,5067,5068,5069,5070,5071,5072,5073,5074,5075,5076,5077,5078,5079,5080,5081,5082,5083,5084,5085,5086,5087,5088,5089,5090,5091"
 SET "DATA_SOURCES=7700,9910,9914,9916,9918,9920,9922,8822,8824,10515,10520,10523,11209,11210,11211,11212,11213,11214,11215,11216,11217,11218,11219,11220,11221,11222,11223"
 ```
-> These are the full canonical lists, reproduced verbatim from the [postgis-exposure README](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/README.md#deploy), which remains the authoritative source. If you are re-running after a while, check there for the current set. `VARIABLES` IDs come from `VRBL_SRC_SIMPLE.csv`; `DATA_SOURCES` IDs from `DATA_SRC_SIMPLE.csv`.
+> These are the full canonical lists, reproduced verbatim from the [postgis-exposure README](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/README.md#deploy), which remains the authoritative source. If you are re-running after a while, check there for the current set. `VARIABLES` IDs come from `VRBL_SRC_SIMPLE.csv`; `DATA_SOURCES` IDs from `DATA_SRC_SIMPLE.csv`.
 
 **Step 2: Build the image and start the Postgres/PostGIS container.**
 
@@ -308,7 +308,7 @@ docker run --rm --name postgis-chorus ^
     -d chorus-postgis-exposure-local:latest
 ```
 
-> ℹ️ **Build locally rather than pulling the published image.** `ghcr.io/chorus-ai/chorus-postgis-exposure:main` has not yet been rebuilt against the current code, so it may not match what this guide describes. A refreshed image is expected soon; once it lands you can swap `-d chorus-postgis-exposure-local:latest` for `-d ghcr.io/chorus-ai/chorus-postgis-exposure:main` and drop the `docker build` line. Every later step is identical either way.
+> ℹ️ **Local build or published image.** CHoRUS builds `ghcr.io/chorus-ai/chorus-postgis-exposure` from the same `postgis-exposure` code ([chorus-ai/chorus-container-apps](https://github.com/chorus-ai/chorus-container-apps/tree/894d540a72ef0913f5d83fb1543440280e5164e3/postgis-exposure), revision `894d540a`). To run the exact image used in our benchmark, drop the `docker build` line and replace `-d chorus-postgis-exposure-local:latest` with `-d ghcr.io/chorus-ai/chorus-postgis-exposure:main@sha256:06768ff5163ce6c98031f98c7c368bf88a67795636e89236f966c68ccc1661ca`. A local build installs whatever `postgis/postgis:16-3.4-alpine` and Alpine packages are current, so its PostgreSQL, PostGIS, and GDAL versions can differ from the published image (PostgreSQL 16.4, PostGIS 3.4.3, GDAL 3.9.2). Every later step is identical either way.
 
 > `POSTGRES_PASSWORD=dummy` is safe as-is: the database is local to this throwaway container and is never exposed off-host.
 
@@ -397,7 +397,7 @@ See [Date Shifting SOP for More Details](https://github.com/chorus-ai/Chorus_SOP
 - Sample files: [Geocoding Demo Files](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/demo)
 
 #### GIS Linkage
-- **Container documentation:** [postgis-exposure README](https://github.com/bihorac-LAB/EnvironmentalData/blob/main/Tools/postgis-exposure/README.md): authoritative source for the linkage container's deploy commands and the current `VARIABLES` / `DATA_SOURCES` lists.
+- **Container documentation:** [postgis-exposure README](https://github.com/chorus-ai/chorus-container-apps/blob/main/postgis-exposure/README.md): authoritative source for the linkage container's deploy commands and the current `VARIABLES` / `DATA_SOURCES` lists.
 - Sample files: [PostGIS Exposure CSVs](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure/csv)
   - **Site-specific:** `LOCATION`, `LOCATION_HISTORY`
   - **Centrally managed:** `DATA_SRC_SIMPLE`, `VRBL_SRC_SIMPLE`
@@ -438,6 +438,8 @@ This appendix outlines the scripts and Docker-based DeGAUSS toolkit used interna
 | Purpose                  | Docker Image                                     |
 |--------------------------|--------------------------------------------------|
 | Address to Coordinates   | `ghcr.io/degauss-org/geocoder:3.3.0`             |
+
+The script starts DeGAUSS by tag. To confirm that your local copy is the build we tested, check that `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/degauss-org/geocoder:3.3.0` ends in `sha256:39bbcb4a2c8f832dbf3d957285bbe23081095a839ab162360044a7ddd539dbf4`.
 
 Executed internally as:
 
