@@ -1,0 +1,16 @@
+Environmental Data Linkage Tool
+Copyright 2025-2026 Bihorac Lab
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Tools/postgis-exposure contains the exposure linkage code of the CHoRUS project,
+taken unchanged from https://github.com/chorus-ai/chorus-container-apps
+(folder postgis-exposure, revision 894d540a72ef0913f5d83fb1543440280e5164e3).
+CHoRUS publishes this code as the container image
+ghcr.io/chorus-ai/chorus-postgis-exposure. It is distributed under its own
+license, Tools/postgis-exposure/LICENSE: the Apache License, Version 2.0, with
+an additional restriction on works related to EPIC.
+
+The geocoding scripts in Tools/code start the DeGAUSS geocoder container
+(ghcr.io/degauss-org/geocoder), which is not included in this repository and is
+distributed by the DeGAUSS project under its own license.
