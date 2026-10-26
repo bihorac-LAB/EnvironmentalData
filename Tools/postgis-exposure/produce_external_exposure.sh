@@ -377,155 +377,51 @@ CROSS JOIN LATERAL generate_series(
 ) AS gs(year_start);"
 check_status "Merging location tables"
 
-psql -v ON_ERROR_STOP=1 -U postgres -c "ALTER TABLE working.location_merge ADD COLUMN geom geometry(Point, 4326);"
-psql -v ON_ERROR_STOP=1 -U postgres -c "UPDATE working.location_merge SET geom = ST_SetSRID(ST_POINT(longitude, latitude), 4326);"
-echo "LOCATION and LOCATION_HISTORY loaded and merged! Launching ingestion of datasets (${DATA_SOURCES})..."
-
-rm -rf /shapes
-mkdir /shapes
-
-for src in "${DATA_SOURCE_LIST[@]}"; do
-  echo "*********************************************"
-  echo "Retrieving metadata for variable ${src}..."
-  # Pull metadata from database
-  download_url=$(psql -U postgres -AXqtc "SELECT download_url FROM backbone.data_source WHERE data_source_uuid = ${src}")
-  file_format=$(psql -U postgres -AXqtc "SELECT download_subtype FROM backbone.data_source WHERE data_source_uuid = ${src}")
-  shape_name=$(psql -U postgres -AXqtc "SELECT download_filename FROM backbone.data_source WHERE data_source_uuid = ${src}")
-  shape_no_ext=$(psql -U postgres -AXqtc "SELECT split_part(download_filename, '.', 1) FROM backbone.data_source WHERE data_source_uuid = ${src}")
-  data_standard=$(psql -U postgres -AXqtc "SELECT download_data_standard FROM backbone.data_source WHERE data_source_uuid = ${src}")
-  srid=$(psql -U postgres -AXqtc "SELECT srid FROM backbone.data_source WHERE data_source_uuid = ${src}")
-  geom_type=$(psql -U postgres -AXqtc "SELECT COALESCE(geom_type, 'MISSING') FROM backbone.data_source WHERE data_source_uuid = ${src}")
-
-
-  echo "Metadata fetched from database!"
-  echo "*********************************************"
-  echo "*********************************************"
-  echo "Fetching source data - ${shape_name} - for variable ${src}..."
-
-  # Fetch and extract source files
-  if  [ "$file_format" = "zip" ]; then
-    wget -q -O "/shapes/${shape_name}.${file_format}" "${download_url}"
-    if [ $? -ne 0 ] || [ ! -s "/shapes/${shape_name}.${file_format}" ]; then
-        echo "ERROR: Download failed for ${shape_name} from ${download_url}. Skipping."
-        rm -f "/shapes/${shape_name}.${file_format}"
-        continue
-    fi
-    echo "Processing /shapes/${shape_name}.${file_format}..."
-    unzip -qq -o -d "/shapes" "/shapes/${shape_name}.${file_format}"
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Unzip failed for ${shape_name}! Skipping this data source."
-        continue
-    fi
-    # Only remove if success
-    rm "/shapes/${shape_name}.${file_format}"
-  elif   [ "$file_format" = "tar.gz" ]; then
-    wget -q -O "/shapes/${shape_name}.${file_format}" "${download_url}"
-    if [ $? -ne 0 ] || [ ! -s "/shapes/${shape_name}.${file_format}" ]; then
-        echo "ERROR: Download failed for ${shape_name} from ${download_url}. Skipping."
-        rm -f "/shapes/${shape_name}.${file_format}"
-        continue
-    fi
-    tar -xzf "/shapes/${shape_name}.${file_format}" -C "/shapes"
-    rm "/shapes/${shape_name}.${file_format}"
-  elif [ "$file_format" = "csv" ]; then
-    wget -q -O "/shapes/${shape_name}" "${download_url}"
-    if [ $? -ne 0 ] || [ ! -s "/shapes/${shape_name}" ]; then
-        echo "ERROR: Download failed for ${shape_name} from ${download_url}. Skipping."
-        rm -f "/shapes/${shape_name}"
-        continue
-    fi
-  else
-    echo "Catalog processing for ${file_format} not yet supported!"
-    continue
+# * - * - * - * - * - * - * - * - * -
+# Linkage settings (all optional)
+#   LINKAGE_WORKERS        parallel database sessions and downloads (default: number of CPUs, at most 4)
+#   LINKAGE_BATCH_SIZE     locations per checkpointed batch (default 10000)
+#   LINKAGE_STATE_DIR      where finished batches are kept so an interrupted run resumes (default /source/.linkage_state)
+#   LINKAGE_RESUME         0 discards finished batches and starts over (default 1)
+#   LINKAGE_CACHE_DIR      where downloaded source files are kept for later runs (default /source/.linkage_cache)
+#   LINKAGE_CACHE          0 downloads every source again and keeps nothing (default 1)
+# * - * - * - * - * - * - * - * - * -
+CPUS=$(nproc 2>/dev/null || echo 1)
+WORKERS=${LINKAGE_WORKERS:-$(( CPUS < 4 ? CPUS : 4 ))}
+BATCH_SIZE=${LINKAGE_BATCH_SIZE:-10000}
+STATE_DIR=${LINKAGE_STATE_DIR:-/source/.linkage_state}
+RESUME=${LINKAGE_RESUME:-1}
+CACHE_DIR=${LINKAGE_CACHE_DIR:-/source/.linkage_cache}
+[ "${LINKAGE_CACHE:-1}" = "0" ] && CACHE_DIR=""
+ASSIGN_CHUNK=25000
+# Private scratch folder: under Apptainer /tmp is the host's, shared with any other run on the node.
+RUN_TMP=$(mktemp -d /tmp/linkage.XXXXXX)
+for setting in WORKERS BATCH_SIZE; do
+  if ! [[ "${!setting}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: LINKAGE_${setting} must be a positive integer, got '${!setting}'."
+    exit 1
   fi
-
-  # echo "Source data extracted. Listing /shapes content:"
-  # ls -R /shapes
-
-  echo "Ingesting source data - ${shape_name} - for variable ${src}..."
-
-  # Find actual file location (handle subfolders)
-  # If shape_name is a directory (gdb), look for it. If file (shp), look for it.
-  TARGET_PATH="/shapes/${shape_name}"
-  
-  if [ ! -e "$TARGET_PATH" ]; then
-     echo "Target path $TARGET_PATH not found. Searching recursively..."
-     FOUND=$(find /shapes -name "${shape_name}" -print -quit)
-     if [ -n "$FOUND" ]; then
-         echo "Found at $FOUND"
-         TARGET_PATH="$FOUND"
-     else
-         echo "ERROR: Could not find ${shape_name} in /shapes"
-         echo "Listing /shapes contents:"
-         ls -R /shapes
-     fi
-  fi
-
-  # Load source files into database
-  if  [ "$geom_type" = "polygon" ]; then
-    if  [ "$data_standard" = "shp" ]; then
-        psql -q -v ON_ERROR_STOP=1 -U postgres -c "DROP TABLE IF EXISTS public.${shape_no_ext} CASCADE;" > /dev/null 2>&1
-        shp2pgsql \
-          -c \
-          -D \
-          -I \
-          -s "${srid}" \
-          "$TARGET_PATH" \
-          "${shape_no_ext}" \
-          | psql -q -v ON_ERROR_STOP=1 -U postgres > /dev/null 2>&1
-      if  [ "$srid" != "4326" ]; then
-        psql -q -v ON_ERROR_STOP=1 -U postgres -c "ALTER TABLE public.${shape_no_ext} ADD COLUMN wgs_geom geometry(MULTIPOLYGON, 4326);" > /dev/null
-        psql -q -v ON_ERROR_STOP=1 -U postgres -c "UPDATE public.${shape_no_ext} SET wgs_geom = ST_TRANSFORM(geom, 4326);" > /dev/null
-      else
-        psql -q -v ON_ERROR_STOP=1 -U postgres -c "ALTER TABLE public.${shape_no_ext} ADD COLUMN wgs_geom geometry(MULTIPOLYGON, 4326);" > /dev/null
-        psql -q -v ON_ERROR_STOP=1 -U postgres -c "UPDATE public.${shape_no_ext} SET wgs_geom = geom;" > /dev/null
-      fi
-    fi
-  fi
-
-  if  [ "$data_standard" = "gdb" ]; then
-    # echo "Running ogr2ogr for GDB..."
-    # Ensure we use WGS84 (EPSG:4326) and name the geometry column 'wgs_geom' for consistency with shapefile logic
-    ogr2ogr \
-    -f "PostgreSQL" \
-    -overwrite \
-    -t_srs EPSG:4326 \
-    -lco GEOMETRY_NAME=wgs_geom \
-    -nln "${shape_no_ext}" \
-    PG:"host='localhost' port='5432' dbname='postgres' user='postgres' password='$PGPASSWORD'" \
-    "$TARGET_PATH" > /dev/null 2>&1
-    
-    if [ $? -eq 0 ]; then
-       # echo "ogr2ogr success."
-       :
-    else
-       echo "ogr2ogr FAILED for ${shape_no_ext}"
-    fi
-  fi
-
-    if [ "$data_standard" = "csv" ]; then
-     ogr2ogr \
-     -f "PostgreSQL" \
-     -overwrite \
-     -oo HEADERS=YES \
-    -oo AUTODETECT_TYPE=NO \
-     -nln "${shape_no_ext}" \
-     PG:"host='localhost' port='5432' dbname='postgres' user='postgres' password='$PGPASSWORD'" \
-     "$TARGET_PATH" > /dev/null 2>&1
-
-     if [ $? -eq 0 ]; then
-       :
-     else
-       echo "ogr2ogr FAILED for ${shape_no_ext}"
-     fi
-    fi
-
-  echo "Source data ingested for public.${shape_no_ext}!"
-
-  echo "*********************************************"
 done
 
-# Handle VARIABLES=ALL — expand to all variable IDs for loaded data sources
+STAGE_START=$EPOCHREALTIME
+stage_done() {
+  echo "[timing] $1 $(awk "BEGIN{printf \"%.1f\", $EPOCHREALTIME - $STAGE_START}") s"
+  STAGE_START=$EPOCHREALTIME
+}
+
+# Run at most $WORKERS commands at once. Callers check results through the files each command writes,
+# not through exit codes, so a lost status cannot hide a failure.
+pool_run() {
+  while [ "$(jobs -rp | wc -l)" -ge "$WORKERS" ]; do
+    wait -n 2>/dev/null || true
+  done
+  "$@" &
+}
+
+psql -q -v ON_ERROR_STOP=1 -U postgres -f /sql/linkage.sql > /dev/null
+check_status "Loading /sql/linkage.sql"
+
+# Handle VARIABLES=ALL — expand to all variable IDs for the requested data sources
 if [ "${#VARIABLE_LIST[@]}" -eq 1 ] && [ "${VARIABLE_LIST[0]}" = "ALL" ]; then
   echo "VARIABLES=ALL detected. Fetching variable IDs for loaded data sources..."
   ALL_VARS=$(psql -U postgres -AXqtc "SELECT variable_source_id FROM backbone.variable_source WHERE data_source_uuid IN (${DATA_SOURCES}) ORDER BY variable_source_id")
@@ -535,96 +431,307 @@ if [ "${#VARIABLE_LIST[@]}" -eq 1 ] && [ "${VARIABLE_LIST[0]}" = "ALL" ]; then
   done <<< "$ALL_VARS"
   echo "Found ${#VARIABLE_LIST[@]} variables to process."
 fi
+RUN_VARIABLES=$(IFS=','; echo "${VARIABLE_LIST[*]}")
 
-for var in "${VARIABLE_LIST[@]}"; do
-  echo "Launching spatial join process to combine locations with variable ${var}..."
+read -r ADDRESS_YEARS POINT_COUNT BATCH_COUNT <<< "$(psql -v ON_ERROR_STOP=1 -U postgres -AXqtc "SELECT working.lk_prepare_points(${BATCH_SIZE})")"
+check_status "Preparing address points"
+echo "Prepared ${ADDRESS_YEARS} address-years at ${POINT_COUNT} distinct points in ${BATCH_COUNT} batch(es) of up to ${BATCH_SIZE} locations."
+stage_done "load_and_merge"
 
-    # Use a simpler query that doesn't rely on subselect limits which might be weird in some contexts
-    # Also added debug echo
-    
-    geo_source=$(psql -U postgres -AXqtc "SELECT split_part(download_filename, '.', 1) FROM backbone.data_source WHERE data_source_uuid = (SELECT geom_dependency_uuid FROM backbone.variable_source WHERE variable_source_id = ${var} LIMIT 1)")
-    var_source=$(psql -U postgres -AXqtc "SELECT split_part(download_filename, '.', 1) FROM backbone.data_source WHERE data_source_uuid = (SELECT data_source_uuid FROM backbone.variable_source WHERE variable_source_id = ${var} LIMIT 1)")
-    geo_merge=$(psql -U postgres -AXqtc "SELECT geom_join_column FROM backbone.data_source WHERE data_source_uuid = (SELECT geom_dependency_uuid FROM backbone.variable_source WHERE variable_source_id = ${var} LIMIT 1)")
-    var_merge=$(psql -U postgres -AXqtc "SELECT geom_join_column FROM backbone.variable_source WHERE variable_source_id = ${var} LIMIT 1")
-    var_name=$(psql -U postgres -AXqtc "SELECT variable_name FROM backbone.variable_source WHERE variable_source_id = ${var} LIMIT 1")
-    var_col=$(psql -U postgres -AXqtc "SELECT value_as_number_col FROM backbone.variable_source WHERE variable_source_id = ${var} LIMIT 1")
-    # If var_col is empty, fallback to var_name (backward compatibility)
-    if [ -z "$var_col" ]; then
-        var_col="$var_name"
-    fi
+# * - * - * - * - * - * - * - * - * -
+# Recovery state: one CSV per finished batch, valid only for the exact inputs, settings and code that made it.
+# * - * - * - * - * - * - * - * - * -
+FINGERPRINT=$(
+  {
+    sha256sum /source/LOCATION.csv /source/LOCATION_HISTORY.csv /sql/linkage.sql /sql/link_batch.sql "$0" | cut -d' ' -f1
+    echo "VARIABLES=${RUN_VARIABLES}"
+    echo "DATA_SOURCES=${DATA_SOURCES}"
+    echo "BATCH_SIZE=${BATCH_SIZE}"
+    psql -U postgres -AXqtc "SELECT version(), postgis_full_version()"
+  } | sha256sum | cut -d' ' -f1
+)
+if [ -d "$STATE_DIR" ]; then
+  if [ "$RESUME" = "0" ]; then
+    reset_reason="LINKAGE_RESUME=0"
+  elif [ "$(cat "$STATE_DIR/fingerprint" 2>/dev/null)" != "$FINGERPRINT" ]; then
+    reset_reason="inputs, settings or code changed since it was written"
+  else
+    reset_reason=""
+  fi
+  if [ -n "$reset_reason" ]; then
+    echo "Setting aside previous linkage state ($reset_reason): ${STATE_DIR} -> ${STATE_DIR}.previous"
+    rm -rf "${STATE_DIR}.previous"
+    mv "$STATE_DIR" "${STATE_DIR}.previous"
+  fi
+fi
+mkdir -p "$STATE_DIR"
+check_status "Creating ${STATE_DIR}"
+echo "$FINGERPRINT" > "$STATE_DIR/fingerprint"
+find "$STATE_DIR" -name 'part_*.csv.tmp' -delete
 
-    # Guardrail: if metadata join key does not exist on the variable source table,
-    # try common alternatives to avoid failing a full variable batch.
-    has_var_merge_col=$(psql -U postgres -AXqtc "
-      SELECT 1
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = lower('${var_source}')
-        AND lower(column_name) = lower('${var_merge}')
-      LIMIT 1")
-    if [ -z "$has_var_merge_col" ]; then
-      if psql -U postgres -AXqtc "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=lower('${var_source}') AND lower(column_name)='fips' LIMIT 1" | grep -q 1; then
-        echo "Join key ${var_merge} not found on public.${var_source}; falling back to FIPS for variable ${var}."
-        var_merge="FIPS"
-      elif psql -U postgres -AXqtc "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=lower('${var_source}') AND lower(column_name)='geoid' LIMIT 1" | grep -q 1; then
-        echo "Join key ${var_merge} not found on public.${var_source}; falling back to GEOID for variable ${var}."
-        var_merge="GEOID"
-      fi
-    fi
-
-    # Performance optimization: materialize a location-specific subset of the geometry source
-    # once per run, then reuse it for all variables sharing that geometry source.
-    if [ "$geo_source" != "$var_source" ]; then
-      original_geo_source="$geo_source"
-      subset_table="${original_geo_source}_loc_subset"
-
-      if ! array_contains "$original_geo_source" "${GEO_SUBSET_SOURCES[@]}"; then
-        echo "Building location-specific geometry subset for public.${original_geo_source}..."
-        psql -q -v ON_ERROR_STOP=1 -U postgres -c "
-          DROP TABLE IF EXISTS public.${subset_table};
-          CREATE TABLE public.${subset_table} AS
-          SELECT DISTINCT b.*
-          FROM public.${original_geo_source} b
-          INNER JOIN working.location_merge gol
-            ON public.st_within(gol.geom, b.wgs_geom);
-          CREATE INDEX IF NOT EXISTS ${subset_table}_wgs_geom_idx
-            ON public.${subset_table}
-            USING GIST (wgs_geom);
-          ANALYZE public.${subset_table};
-        " > /dev/null
-        check_status "Building geometry subset for ${original_geo_source}"
-
-        subset_count=$(psql -U postgres -AXqtc "SELECT count(*) FROM public.${subset_table}")
-        echo "Subset public.${subset_table} contains ${subset_count} geometry rows."
-
-        GEO_SUBSET_SOURCES+=("$original_geo_source")
-      fi
-
-      geo_source="$subset_table"
-    fi
-    
-    tmp_sql_file="/tmp/${var_name}.sql"
-
-    if [ "$geo_source" != "$var_source" ]; then
-      sed "s/@VAR_NAME/$var_name/g" /sql/spatial_join_2pt.sql | \
-          sed "s/@VAR_ID/$var/g" | \
-          sed "s/@VAR_COL/$var_col/g" | \
-          sed "s/@VAR_SRC/$var_source/g" | \
-          sed "s/@GEO_SRC/$geo_source/g" | \
-          sed "s/@VAR_MERGE/$var_merge/g" | \
-          sed "s/@GEO_MERGE/$geo_merge/g" > "/tmp/${var_name}.sql"
-    else
-      sed "s/@VAR_NAME/$var_name/g" /sql/spatial_join_1pt.sql | \
-          sed "s/@VAR_ID/$var/g" | \
-          sed "s/@VAR_COL/$var_col/g" | \
-          sed "s/@VAR_SRC/$var_source/g" > "/tmp/${var_name}.sql"
-    fi
-
-    psql -q -v ON_ERROR_STOP=1 -U postgres -f "${tmp_sql_file}" > /dev/null
+part_file() { printf '%s/part_%06d.csv' "$STATE_DIR" "$1"; }
+PENDING=()
+for ((b = 0; b < BATCH_COUNT; b++)); do
+  [ -f "$(part_file "$b")" ] || PENDING+=("$b")
 done
+DONE_COUNT=$((BATCH_COUNT - ${#PENDING[@]}))
+if [ "$DONE_COUNT" -gt 0 ]; then
+  echo "Resuming: ${DONE_COUNT} of ${BATCH_COUNT} batch(es) already finished in ${STATE_DIR}."
+fi
+
+# * - * - * - * - * - * - * - * - * -
+# Ingest data sources, ${WORKERS} at a time. Downloads are cached in ${CACHE_DIR} when it is set.
+# * - * - * - * - * - * - * - * - * -
+psql -q -v ON_ERROR_STOP=1 -U postgres -c "CREATE TABLE IF NOT EXISTS working.lk_ingested (data_source_uuid integer PRIMARY KEY, download_url text, table_name text);"
+
+fetch_source() {  # fetch_source <src> <url> <file name> -> prints the local path, or nothing on failure
+  local src=$1 url=$2 name=$3
+  local dest
+  if [ -n "$CACHE_DIR" ]; then
+    dest="${CACHE_DIR}/${src}_$(printf '%s' "$url" | sha256sum | cut -c1-12)_${name}"
+    if [ -s "$dest" ]; then
+      echo "Using cached ${dest}" >&2
+      echo "$dest"
+      return
+    fi
+  else
+    dest="/shapes/${src}/${name}"
+  fi
+  local part="${dest}.part.${BASHPID}"
+  wget -q -O "$part" "$url"
+  if [ $? -ne 0 ] || [ ! -s "$part" ]; then
+    rm -f "$part"
+    return
+  fi
+  mv "$part" "$dest"
+  echo "$dest"
+}
+
+ingest_source() {
+  local src=$1
+  local download_url file_format shape_name shape_no_ext data_standard srid geom_type
+  echo "*********************************************"
+  echo "Retrieving metadata for variable ${src}..."
+  download_url=$(psql -U postgres -AXqtc "SELECT download_url FROM backbone.data_source WHERE data_source_uuid = ${src}")
+  file_format=$(psql -U postgres -AXqtc "SELECT download_subtype FROM backbone.data_source WHERE data_source_uuid = ${src}")
+  shape_name=$(psql -U postgres -AXqtc "SELECT download_filename FROM backbone.data_source WHERE data_source_uuid = ${src}")
+  shape_no_ext=$(psql -U postgres -AXqtc "SELECT split_part(download_filename, '.', 1) FROM backbone.data_source WHERE data_source_uuid = ${src}")
+  data_standard=$(psql -U postgres -AXqtc "SELECT download_data_standard FROM backbone.data_source WHERE data_source_uuid = ${src}")
+  srid=$(psql -U postgres -AXqtc "SELECT srid FROM backbone.data_source WHERE data_source_uuid = ${src}")
+  geom_type=$(psql -U postgres -AXqtc "SELECT COALESCE(geom_type, 'MISSING') FROM backbone.data_source WHERE data_source_uuid = ${src}")
+  echo "Metadata fetched from database!"
+
+  # Already loaded into this database by an earlier run (docker exec again after a failure)
+  if psql -U postgres -AXqtc "SELECT 1 FROM working.lk_ingested WHERE data_source_uuid = ${src} AND download_url = '${download_url}' AND to_regclass('public.' || lower(table_name)) IS NOT NULL" | grep -q 1; then
+    echo "Source data for ${src} (public.${shape_no_ext}) is already loaded; skipping download and ingest."
+    return
+  fi
+
+  echo "Fetching source data - ${shape_name} - for variable ${src}..."
+  local dir="/shapes/${src}" archive
+  mkdir -p "$dir"
+  if [ "$file_format" = "zip" ] || [ "$file_format" = "tar.gz" ] || [ "$file_format" = "csv" ]; then
+    if [ "$file_format" = "csv" ]; then
+      archive=$(fetch_source "$src" "$download_url" "${shape_name}")
+    else
+      archive=$(fetch_source "$src" "$download_url" "${shape_name}.${file_format}")
+    fi
+    if [ -z "$archive" ]; then
+      echo "ERROR: Download failed for ${shape_name} from ${download_url}. Skipping."
+      return
+    fi
+  else
+    echo "Catalog processing for ${file_format} not yet supported!"
+    return
+  fi
+  if [ "$file_format" = "zip" ]; then
+    echo "Processing ${archive}..."
+    unzip -qq -o -d "$dir" "$archive"
+    if [ $? -ne 0 ]; then
+      echo "ERROR: Unzip failed for ${shape_name}! Skipping this data source."
+      return
+    fi
+  elif [ "$file_format" = "tar.gz" ]; then
+    tar -xzf "$archive" -C "$dir"
+  elif [ "$archive" != "${dir}/${shape_name}" ]; then
+    ln -sf "$archive" "${dir}/${shape_name}"
+  fi
+  [ -z "$CACHE_DIR" ] && [ "$file_format" != "csv" ] && rm -f "$archive"
+
+  echo "Ingesting source data - ${shape_name} - for variable ${src}..."
+  local TARGET_PATH="${dir}/${shape_name}"
+  if [ ! -e "$TARGET_PATH" ]; then
+    echo "Target path $TARGET_PATH not found. Searching recursively..."
+    local FOUND
+    FOUND=$(find "$dir" -name "${shape_name}" -print -quit)
+    if [ -n "$FOUND" ]; then
+      echo "Found at $FOUND"
+      TARGET_PATH="$FOUND"
+    else
+      echo "ERROR: Could not find ${shape_name} in ${dir}"
+      echo "Listing ${dir} contents:"
+      ls -R "$dir"
+    fi
+  fi
+
+  local loaded=1
+  if [ "$geom_type" = "polygon" ] && [ "$data_standard" = "shp" ]; then
+    psql -q -v ON_ERROR_STOP=1 -U postgres -c "DROP TABLE IF EXISTS public.${shape_no_ext} CASCADE;" > /dev/null 2>&1
+    shp2pgsql -c -D -I -s "${srid}" "$TARGET_PATH" "${shape_no_ext}" \
+      | psql -q -v ON_ERROR_STOP=1 -U postgres > /dev/null 2>&1 || loaded=0
+    psql -q -v ON_ERROR_STOP=1 -U postgres -c "ALTER TABLE public.${shape_no_ext} ADD COLUMN wgs_geom geometry(MULTIPOLYGON, 4326);" > /dev/null || loaded=0
+    if [ "$srid" != "4326" ]; then
+      psql -q -v ON_ERROR_STOP=1 -U postgres -c "UPDATE public.${shape_no_ext} SET wgs_geom = ST_TRANSFORM(geom, 4326);" > /dev/null || loaded=0
+    else
+      psql -q -v ON_ERROR_STOP=1 -U postgres -c "UPDATE public.${shape_no_ext} SET wgs_geom = geom;" > /dev/null || loaded=0
+    fi
+  fi
+
+  if [ "$data_standard" = "gdb" ]; then
+    # Use WGS84 (EPSG:4326) and name the geometry column 'wgs_geom' for consistency with shapefile logic
+    ogr2ogr \
+      -f "PostgreSQL" \
+      -overwrite \
+      -t_srs EPSG:4326 \
+      -lco GEOMETRY_NAME=wgs_geom \
+      -nln "${shape_no_ext}" \
+      PG:"host='localhost' port='${PGPORT:-5432}' dbname='postgres' user='postgres' password='$PGPASSWORD'" \
+      "$TARGET_PATH" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      echo "ogr2ogr FAILED for ${shape_no_ext}"
+      loaded=0
+    fi
+  fi
+
+  if [ "$data_standard" = "csv" ]; then
+    ogr2ogr \
+      -f "PostgreSQL" \
+      -overwrite \
+      -oo HEADERS=YES \
+      -oo AUTODETECT_TYPE=NO \
+      -nln "${shape_no_ext}" \
+      PG:"host='localhost' port='${PGPORT:-5432}' dbname='postgres' user='postgres' password='$PGPASSWORD'" \
+      "$TARGET_PATH" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      echo "ogr2ogr FAILED for ${shape_no_ext}"
+      loaded=0
+    fi
+  fi
+
+  if [ "$loaded" = "1" ]; then
+    psql -q -v ON_ERROR_STOP=1 -U postgres -c "INSERT INTO working.lk_ingested VALUES (${src}, '${download_url}', '${shape_no_ext}') ON CONFLICT (data_source_uuid) DO UPDATE SET download_url = EXCLUDED.download_url, table_name = EXCLUDED.table_name;" > /dev/null
+  fi
+  echo "Source data ingested for public.${shape_no_ext}!"
+  echo "*********************************************"
+}
+
+if [ "$BATCH_COUNT" -eq 0 ]; then
+  echo "No address-years to link (no LOCATION_HISTORY row matches a LOCATION row); skipping ingestion and linkage."
+elif [ "${#PENDING[@]}" -eq 0 ]; then
+  echo "Every batch is already finished; skipping ingestion and linkage."
+else
+  echo "LOCATION and LOCATION_HISTORY loaded and merged! Launching ingestion of datasets (${DATA_SOURCES}) with ${WORKERS} worker(s)..."
+  rm -rf /shapes
+  mkdir /shapes
+  [ -n "$CACHE_DIR" ] && mkdir -p "$CACHE_DIR"
+  mkdir -p "$RUN_TMP/ingest"
+  for src in "${DATA_SOURCE_LIST[@]}"; do
+    pool_run ingest_source "$src" > "$RUN_TMP/ingest/${src}.log" 2>&1
+  done
+  wait
+  for src in "${DATA_SOURCE_LIST[@]}"; do
+    cat "$RUN_TMP/ingest/${src}.log"
+  done
+  stage_done "ingest"
+
+  # * - * - * - * - * - * - * - * - * -
+  # Link: resolve variables, place points in polygons, read values, then one query per batch.
+  # * - * - * - * - * - * - * - * - * -
+  echo "Launching spatial join process to combine ${POINT_COUNT} points with ${#VARIABLE_LIST[@]} variable(s) in ${#PENDING[@]} batch(es), ${WORKERS} worker(s)..."
+  OK_VARS=$(echo "SELECT working.lk_prepare_run(:'run_variables')" | psql -v ON_ERROR_STOP=1 -U postgres -AXqt -v run_variables="$RUN_VARIABLES")
+  check_status "Resolving variables"
+  echo "${OK_VARS} of ${#VARIABLE_LIST[@]} variable(s) can be linked."
+  stage_done "resolve_variables"
+
+  mkdir -p "$RUN_TMP/assign"
+  assign_chunk() {  # assign_chunk <area id> <first pt_id> <last pt_id>
+    psql -q -v ON_ERROR_STOP=1 -U postgres -AXtc "SELECT working.lk_assign($1, $2, $3)" > /dev/null \
+      && touch "$RUN_TMP/assign/$1_$2.ok"
+  }
+  AREAS=$(psql -U postgres -AXqtc "SELECT area_id FROM working.lk_area ORDER BY area_id")
+  expected=0
+  for area in $AREAS; do
+    for ((lo = 1; lo <= POINT_COUNT; lo += ASSIGN_CHUNK)); do
+      pool_run assign_chunk "$area" "$lo" "$((lo + ASSIGN_CHUNK - 1))"
+      expected=$((expected + 1))
+    done
+  done
+  wait
+  if [ "$(find "$RUN_TMP/assign" -name '*.ok' | wc -l)" -ne "$expected" ]; then
+    echo "ERROR: Placing points in polygons failed for some chunks; see the errors above."
+    exit 1
+  fi
+  stage_done "assign_points"
+
+  VALUE_ROWS=$(psql -v ON_ERROR_STOP=1 -U postgres -AXqtc "SELECT working.lk_build_values()")
+  check_status "Reading variable values"
+  echo "Read ${VALUE_ROWS} polygon values."
+  stage_done "read_values"
+
+  link_batch() {  # link_batch <batch>
+    local out
+    out=$(part_file "$1")
+    if psql -q -X -v ON_ERROR_STOP=1 -U postgres -v batch="$1" -f /sql/link_batch.sql > "${out}.tmp"; then
+      mv "${out}.tmp" "$out"
+    else
+      rm -f "${out}.tmp"
+      echo "ERROR: Batch $1 failed; rerun to resume from the finished batches."
+    fi
+  }
+  for b in "${PENDING[@]}"; do
+    pool_run link_batch "$b"
+  done
+  wait
+  missing=0
+  for ((b = 0; b < BATCH_COUNT; b++)); do
+    [ -f "$(part_file "$b")" ] || missing=$((missing + 1))
+  done
+  if [ "$missing" -gt 0 ]; then
+    echo "ERROR: ${missing} of ${BATCH_COUNT} batch(es) did not finish. Finished batches are kept in ${STATE_DIR}; run the script again to resume."
+    exit 1
+  fi
+  stage_done "link_batches"
+fi
 
 echo "Data sets and variables processed! Exporting EXTERNAL_EXPOSURE..."
 
-psql -q -v ON_ERROR_STOP=1 -U postgres -c "\copy working.external_exposure TO '/source/EXTERNAL_EXPOSURE.csv' CSV HEADER DELIMITER E','"
+# Ids run 1..N in VARIABLES order, then address-year order, so the file does not depend on batching or workers.
+{
+  echo "CREATE TEMP TABLE lk_stage (var_ord integer, lm_id bigint, unit text, location_id integer, person_id integer,
+    exposure_concept_id integer, exposure_start_date date, exposure_start_datetime timestamp, exposure_end_date date,
+    exposure_end_datetime timestamp, exposure_type_concept_id integer, exposure_relationship_concept_id integer,
+    exposure_source_concept_id integer, exposure_source_value varchar(50), exposure_relationship_source_value varchar(50),
+    dose_unit_source_value varchar(50), quantity integer, modifier_source_value varchar(50), operator_concept_id integer,
+    value_as_number float, value_as_concept_id integer, unit_concept_id integer, sdoh_data_year integer,
+    sdoh_year_map_status varchar(20));"
+  for ((b = 0; b < BATCH_COUNT; b++)); do
+    echo "\\copy lk_stage FROM '$(part_file "$b")' CSV"
+  done
+  echo "TRUNCATE working.external_exposure;"
+  echo "INSERT INTO working.external_exposure
+    SELECT row_number() OVER (ORDER BY var_ord, lm_id, unit), location_id, person_id, exposure_concept_id,
+           exposure_start_date, exposure_start_datetime, exposure_end_date, exposure_end_datetime,
+           exposure_type_concept_id, exposure_relationship_concept_id, exposure_source_concept_id, exposure_source_value,
+           exposure_relationship_source_value, dose_unit_source_value, quantity, modifier_source_value,
+           operator_concept_id, value_as_number, value_as_concept_id, unit_concept_id, sdoh_data_year, sdoh_year_map_status
+    FROM lk_stage;"
+  echo "\\copy (SELECT * FROM working.external_exposure ORDER BY external_exposure_id) TO '/source/EXTERNAL_EXPOSURE.csv.tmp' CSV HEADER DELIMITER E','"
+} > "$RUN_TMP/export.sql"
+psql -q -v ON_ERROR_STOP=1 -U postgres -f "$RUN_TMP/export.sql" > /dev/null
+check_status "Exporting EXTERNAL_EXPOSURE"
+mv /source/EXTERNAL_EXPOSURE.csv.tmp /source/EXTERNAL_EXPOSURE.csv
 chmod 777 /source/EXTERNAL_EXPOSURE.csv
-echo "Export complete."
+ROW_COUNT=$(psql -U postgres -AXqtc "SELECT count(*) FROM working.external_exposure")
+stage_done "export"
+rm -rf "$RUN_TMP"
+echo "Export complete. ${ROW_COUNT} rows written to /source/EXTERNAL_EXPOSURE.csv."
