@@ -15,7 +15,7 @@ RUN wget -O /csv/gis_concept_relationship_fragment.csv https://raw.githubusercon
 
 # Copy in local context
 COPY sql/init.sql /docker-entrypoint-initdb.d/init.sql
-COPY sql/spatial_join_1pt.sql /sql
-COPY sql/spatial_join_2pt.sql /sql
+COPY sql/linkage.sql /sql
+COPY sql/link_batch.sql /sql
 COPY csv/* /csv
 COPY produce_external_exposure.sh /app
