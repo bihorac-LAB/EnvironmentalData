@@ -12,3 +12,7 @@ input_csvs/
 /.github
 *.md
 *.docx
+# postgis-exposure run state and download cache, written into the mounted input folder
+.linkage_state/
+.linkage_state.previous/
+.linkage_cache/

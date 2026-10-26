@@ -54,7 +54,7 @@ For exact reproducibility, use the images by digest. Docker accepts `name:tag@sh
 | Address matching (started by the geocoder) | `ghcr.io/degauss-org/geocoder:3.3.0` | `sha256:39bbcb4a2c8f832dbf3d957285bbe23081095a839ab162360044a7ddd539dbf4` |
 | Linkage | `ghcr.io/chorus-ai/chorus-postgis-exposure:main` | `sha256:06768ff5163ce6c98031f98c7c368bf88a67795636e89236f966c68ccc1661ca` |
 
-The linkage image is built by CHoRUS from [`postgis-exposure`](https://github.com/chorus-ai/chorus-container-apps/tree/894d540a72ef0913f5d83fb1543440280e5164e3/postgis-exposure) at revision `894d540a`, the same code as [`Tools/postgis-exposure`](Tools/postgis-exposure). Its `main` tag is rebuilt whenever that folder changes, so pin the digest rather than the tag.
+The linkage image is built by CHoRUS from [`postgis-exposure`](https://github.com/chorus-ai/chorus-container-apps/tree/894d540a72ef0913f5d83fb1543440280e5164e3/postgis-exposure) at revision `894d540a`. Its `main` tag is rebuilt whenever that folder changes, so pin the digest rather than the tag. [`Tools/postgis-exposure`](Tools/postgis-exposure) started from the same revision and now carries a faster linkage that writes the same rows; build it locally as described in the [User Manual](Tools/doc/UserManual.md#step-4-gis-linkage-with-postgis-exposure-tool). The digest above runs the original code.
 
 ### Demo Videos
 - [FIPS Generation](https://www.loom.com/share/603607c1365342cb9fb2303566f529cc?sid=81cab3db-8189-4ad4-b1fd-baca7a73bf25)  
