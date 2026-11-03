@@ -46,7 +46,7 @@ This repository provides a **reproducible workflow** to geocode patient location
 
 This workflow uses **two separate Docker containers** to take patient addresses or coordinates all the way to an analysis-ready exposure file:
 
-1. **Exposome Geocoder Container (`prismaplab/exposome-geocoder:1.0.4`)**  
+1. **Exposome Geocoder Container (`prismaplab/exposome-geocoder:1.0.5`)**  
    Converts addresses or coordinates into OMOP `LOCATION` / `LOCATION_HISTORY` tables with latitude and longitude.
 
 2. **Exposome Linkage Container**, built locally from [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) in this repository  
@@ -123,7 +123,7 @@ For **Option 1 (Address)** or **Option 2 (OMOP)**, your data must be in a **CSV 
 
 ### Step 2: Generate LOCATION Tables
 
-**Container:** `prismaplab/exposome-geocoder:1.0.4` (digest `sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825`)  
+**Container:** `prismaplab/exposome-geocoder:1.0.5` (digest `sha256:004704e92580f1032ea4cf91e52deede62e4315ae9bebbf6c3a3ad4db754b07b`)  
 Ensure **Docker Desktop** is running.
 
 This step produces the `LOCATION.csv` and `LOCATION_HISTORY.csv` that the linkage container consumes in [Step 4](#step-4-gis-linkage-with-postgis-exposure-tool).
@@ -136,7 +136,7 @@ docker run -it --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e HOST_PWD="$(pwd)" \
   -w /workspace \
-  prismaplab/exposome-geocoder:1.0.4@sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825 \
+  prismaplab/exposome-geocoder:1.0.5@sha256:004704e92580f1032ea4cf91e52deede62e4315ae9bebbf6c3a3ad4db754b07b \
   /app/code/Address_to_LOCATION.py -i <input_folder_path>
 ```
 
@@ -146,7 +146,7 @@ docker run -it --rm \
 Example, if your file is inside 📂`input_address/`:
 
 ```bash
-docker run -it --rm   -v "%cd%":/workspace   -v /var/run/docker.sock:/var/run/docker.sock   -e HOST_PWD="%cd%"   -w /workspace   prismaplab/exposome-geocoder:1.0.4@sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825   /app/code/Address_to_LOCATION.py -i input_address
+docker run -it --rm   -v "%cd%":/workspace   -v /var/run/docker.sock:/var/run/docker.sock   -e HOST_PWD="%cd%"   -w /workspace   prismaplab/exposome-geocoder:1.0.5@sha256:004704e92580f1032ea4cf91e52deede62e4315ae9bebbf6c3a3ad4db754b07b   /app/code/Address_to_LOCATION.py -i input_address
 ```
 
 > ℹ️ The script launches the DeGAUSS geocoder in a nested Docker container, which is why the command mounts the Docker socket and passes `HOST_PWD`. All geocoding runs **locally**; no address data leaves your machine.

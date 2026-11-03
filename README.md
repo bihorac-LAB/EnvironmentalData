@@ -50,7 +50,7 @@ For exact reproducibility, use the images by digest. Docker accepts `name:tag@sh
 
 | Step | Image | Digest |
 |---|---|---|
-| Geocoding | `prismaplab/exposome-geocoder:1.0.4` | `sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825` |
+| Geocoding | `prismaplab/exposome-geocoder:1.0.5` | `sha256:004704e92580f1032ea4cf91e52deede62e4315ae9bebbf6c3a3ad4db754b07b` |
 | Address matching (started by the geocoder) | `ghcr.io/degauss-org/geocoder:3.3.0` | `sha256:39bbcb4a2c8f832dbf3d957285bbe23081095a839ab162360044a7ddd539dbf4` |
 | Linkage | `ghcr.io/chorus-ai/chorus-postgis-exposure:main` | `sha256:06768ff5163ce6c98031f98c7c368bf88a67795636e89236f966c68ccc1661ca` |
 
