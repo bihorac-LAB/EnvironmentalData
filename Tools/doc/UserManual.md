@@ -46,7 +46,7 @@ This repository provides a **reproducible workflow** to geocode patient location
 
 This workflow uses **two separate Docker containers** to take patient addresses or coordinates all the way to an analysis-ready exposure file:
 
-1. **Exposome Geocoder Container (`prismaplab/exposome-geocoder:1.0.4`)**  
+1. **Exposome Geocoder Container (`prismaplab/exposome-geocoder:1.0.5`)**  
    Converts addresses or coordinates into OMOP `LOCATION` / `LOCATION_HISTORY` tables with latitude and longitude.
 
 2. **Exposome Linkage Container**, built locally from [`Tools/postgis-exposure`](https://github.com/bihorac-LAB/EnvironmentalData/tree/main/Tools/postgis-exposure) in this repository  
@@ -123,7 +123,7 @@ For **Option 1 (Address)** or **Option 2 (OMOP)**, your data must be in a **CSV 
 
 ### Step 2: Generate LOCATION Tables
 
-**Container:** `prismaplab/exposome-geocoder:1.0.4` (digest `sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825`)  
+**Container:** `prismaplab/exposome-geocoder:1.0.5` (digest `sha256:004704e92580f1032ea4cf91e52deede62e4315ae9bebbf6c3a3ad4db754b07b`)  
 Ensure **Docker Desktop** is running.
 
 This step produces the `LOCATION.csv` and `LOCATION_HISTORY.csv` that the linkage container consumes in [Step 4](#step-4-gis-linkage-with-postgis-exposure-tool).
@@ -136,7 +136,7 @@ docker run -it --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e HOST_PWD="$(pwd)" \
   -w /workspace \
-  prismaplab/exposome-geocoder:1.0.4@sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825 \
+  prismaplab/exposome-geocoder:1.0.5@sha256:004704e92580f1032ea4cf91e52deede62e4315ae9bebbf6c3a3ad4db754b07b \
   /app/code/Address_to_LOCATION.py -i <input_folder_path>
 ```
 
@@ -146,7 +146,7 @@ docker run -it --rm \
 Example, if your file is inside 📂`input_address/`:
 
 ```bash
-docker run -it --rm   -v "%cd%":/workspace   -v /var/run/docker.sock:/var/run/docker.sock   -e HOST_PWD="%cd%"   -w /workspace   prismaplab/exposome-geocoder:1.0.4@sha256:eaaec7646eaa7b6b445bdbbd2c055a15758181b206ebfdcf3159dd99cbe7d825   /app/code/Address_to_LOCATION.py -i input_address
+docker run -it --rm   -v "%cd%":/workspace   -v /var/run/docker.sock:/var/run/docker.sock   -e HOST_PWD="%cd%"   -w /workspace   prismaplab/exposome-geocoder:1.0.5@sha256:004704e92580f1032ea4cf91e52deede62e4315ae9bebbf6c3a3ad4db754b07b   /app/code/Address_to_LOCATION.py -i input_address
 ```
 
 > ℹ️ The script launches the DeGAUSS geocoder in a nested Docker container, which is why the command mounts the Docker socket and passes `HOST_PWD`. All geocoding runs **locally**; no address data leaves your machine.
@@ -308,7 +308,7 @@ docker run --rm --name postgis-chorus ^
     -d chorus-postgis-exposure-local:latest
 ```
 
-> ℹ️ **Local build or published image.** CHoRUS builds `ghcr.io/chorus-ai/chorus-postgis-exposure` from the same `postgis-exposure` code ([chorus-ai/chorus-container-apps](https://github.com/chorus-ai/chorus-container-apps/tree/894d540a72ef0913f5d83fb1543440280e5164e3/postgis-exposure), revision `894d540a`). To run the exact image used in our benchmark, drop the `docker build` line and replace `-d chorus-postgis-exposure-local:latest` with `-d ghcr.io/chorus-ai/chorus-postgis-exposure:main@sha256:06768ff5163ce6c98031f98c7c368bf88a67795636e89236f966c68ccc1661ca`. A local build installs whatever `postgis/postgis:16-3.4-alpine` and Alpine packages are current, so its PostgreSQL, PostGIS, and GDAL versions can differ from the published image (PostgreSQL 16.4, PostGIS 3.4.3, GDAL 3.9.2). Every later step is identical either way.
+> ℹ️ **Build locally.** This folder's linkage is a faster rewrite of CHoRUS `postgis-exposure` ([chorus-ai/chorus-container-apps](https://github.com/chorus-ai/chorus-container-apps/tree/894d540a72ef0913f5d83fb1543440280e5164e3/postgis-exposure), revision `894d540a`): each address is placed in its census tract once and values are joined by tract ID, instead of matching every tract to every source row once per variable. It produces the same `EXTERNAL_EXPOSURE.csv` rows. The image CHoRUS publishes, `ghcr.io/chorus-ai/chorus-postgis-exposure:main@sha256:06768ff5163ce6c98031f98c7c368bf88a67795636e89236f966c68ccc1661ca`, still runs the original per-variable code, which takes hours for a few thousand addresses; you can swap it in for `chorus-postgis-exposure-local:latest` to reproduce earlier results. A local build installs whatever `postgis/postgis:16-3.4-alpine` and Alpine packages are current, so its PostgreSQL, PostGIS, and GDAL versions can differ from the published image (PostgreSQL 16.4, PostGIS 3.4.3, GDAL 3.9.2).
 
 > `POSTGRES_PASSWORD=dummy` is safe as-is: the database is local to this throwaway container and is never exposed off-host.
 
@@ -328,7 +328,9 @@ Wait until you see **`database is ready to accept connections`** before continui
 docker exec postgis-chorus /app/produce_external_exposure.sh
 ```
 
-This retrieves the data sources and combines them with your data to produce the external exposure table.
+This retrieves the data sources and combines them with your data to produce the external exposure table. Each `[timing]` line in the output reports how long a stage took. Downloading the data sources usually takes longest; linking itself takes seconds for a few thousand addresses.
+
+If the run stops partway (the container is stopped, the machine restarts, a batch fails), run the same command again, in the same container or a new one. Finished batches are kept in `test/.linkage_state/` and reused, and downloaded sources are kept in `test/.linkage_cache/`, so only the unfinished work is repeated. Finished batches are only reused if `LOCATION.csv`, `LOCATION_HISTORY.csv`, `VARIABLES`, `DATA_SOURCES`, the batch size and the code are all unchanged; otherwise the script moves them to `test/.linkage_state.previous/` and starts over.
 
 **Step 5: Collect the output.** `EXTERNAL_EXPOSURE.csv` will appear in your mounted `./test` directory.
 
@@ -338,11 +340,26 @@ This retrieves the data sources and combines them with your data to produce the 
 docker stop postgis-chorus
 ```
 
+#### Run settings (optional)
+
+Add any of these to the `docker run` command in Step 2 as `--env NAME=value`.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `LINKAGE_WORKERS` | Number of CPUs, at most 4 | Data sources downloaded at once, and database sessions used for linking. |
+| `LINKAGE_BATCH_SIZE` | `10000` | Locations per batch. A batch is the unit that is saved and, after an interruption, not repeated. |
+| `LINKAGE_RESUME` | `1` | `0` sets finished batches aside and starts the linkage over. |
+| `LINKAGE_STATE_DIR` | `/source/.linkage_state` | Where finished batches are kept. |
+| `LINKAGE_CACHE` | `1` | `0` downloads every data source again on each run and keeps no copies. |
+| `LINKAGE_CACHE_DIR` | `/source/.linkage_cache` | Where downloaded data sources are kept (about 1.5 GB for all 27). |
+
 #### Notes & Tips
-- Run these commands in Terminal (Mac) or ommand Prompt on Windows
+- Run these commands in Terminal (Mac) or Command Prompt on Windows
 - Run all commands from the `Tools/postgis-exposure` directory; the `-v ./test:/source` mount is relative to it.
 - If your site needs more variables, expand `VARIABLES` accordingly.
-- **Important**: The container may only run successfully once. To rerun, you may need to delete the container and image, then rebuild.
+- You can run Step 4 again in the same container, for example after changing `LOCATION.csv`; data sources already loaded into it are not downloaded again.
+- Delete `test/.linkage_state*` and `test/.linkage_cache` when you no longer need them. They hold derived data for your locations and copies of the public data sources.
+- A variable whose source is missing (for example, its data source is not in `DATA_SOURCES` or failed to download) produces no rows, and the output names it in a `WARNING` line.
 
 ---
 
